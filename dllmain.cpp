@@ -200,12 +200,12 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 			p__wine_unix_call = (t__wine_unix_call*)GetProcAddress(hofntdll, "__wine_unix_call");
 		}
 		VirtualProtect(ioctl_inst_data, sizeof(ioctl_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
-        VirtualProtect(open_inst_data, sizeof(open_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
+		VirtualProtect(open_inst_data, sizeof(open_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(mmap_inst_data, sizeof(mmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(munmap_inst_data, sizeof(munmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(close_inst_data, sizeof(close_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		FlushInstructionCache(GetCurrentProcess(), ioctl_inst_data, sizeof(ioctl_inst_data));
-        FlushInstructionCache(GetCurrentProcess(), open_inst_data, sizeof(open_inst_data));
+		FlushInstructionCache(GetCurrentProcess(), open_inst_data, sizeof(open_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), mmap_inst_data, sizeof(mmap_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), munmap_inst_data, sizeof(munmap_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), close_inst_data, sizeof(close_inst_data));
@@ -597,13 +597,107 @@ struct kvm_userspace_memory_region2 {
 
 int kvmfd = 0;
 
+#define AARCH64_CORE_REG(x)   (KVM_REG_ARM64 | KVM_REG_SIZE_U64 | \
+                 KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(x))
+
+#define AARCH64_SIMD_CORE_REG(x)   (KVM_REG_ARM64 | KVM_REG_SIZE_U128 | \
+                 KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(x))
+
+#define AARCH64_SIMD_CTRL_REG(x)   (KVM_REG_ARM64 | KVM_REG_SIZE_U32 | \
+                 KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(x))
+
+
+int kvm_set_one_reg(unsigned int cs, uint64_t id, void* source)
+{
+	struct kvm_one_reg reg;
+	int r;
+
+	reg.id = id;
+	reg.addr = (uintptr_t)source;
+	r = ioctl(cs, KVM_SET_ONE_REG, (UINT64)&reg);
+	return r;
+}
+
+int kvm_get_one_reg(unsigned int cs, uint64_t id, void* target)
+{
+	struct kvm_one_reg reg;
+	int r;
+
+	reg.id = id;
+	reg.addr = (uintptr_t)target;
+	r = ioctl(cs, KVM_GET_ONE_REG, (UINT64)&reg);
+	return r;
+}
+
+void get_kvm_regs(unsigned int run, kvm_regs *regs_tmp)
+{
+	struct kvm_regs regs;
+	for (int cnt = 0; cnt < 31; cnt++) {
+		kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt]);
+	}
+	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp);
+	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc);
+	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate);
+	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1);
+	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1);
+	for (int cnt = 0; cnt < 5; cnt++) {
+		kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt]);
+	}
+	for (int cnt = 0; cnt < 16; cnt++) {
+		kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt].q[0]), &regs.fp_regs.vregs[cnt]);
+	}
+	kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr);
+	kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr);
+	memcpy((void*)regs_tmp, &regs, sizeof(kvm_regs));
+	return;
+}
+void set_kvm_regs(unsigned int run, kvm_regs* regs_tmp)
+{
+	struct kvm_regs regs;
+	memcpy(&regs, (void*)regs_tmp, sizeof(kvm_regs));
+	for (int cnt = 0; cnt < 31; cnt++) {
+		kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt]);
+	}
+	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp);
+	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc);
+	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate);
+	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1);
+	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1);
+	for (int cnt = 0; cnt < 5; cnt++) {
+		kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt]);
+	}
+	for (int cnt = 0; cnt < 16; cnt++) {
+		kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt].q[0]), &regs.fp_regs.vregs[cnt]);
+	}
+	kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr);
+	kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr);
+	return;
+}
+
+void execute_vcpu(unsigned int vcpufd, kvm_regs* regs)
+{
+	set_kvm_regs(vcpufd, regs);
+	ioctl(vcpufd, KVM_RUN, NULL);
+	get_kvm_regs(vcpufd, regs);
+	return;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 	__declspec(dllexport) void* WINAPI BTCpuGetBopCode(void) { return (UINT32*)((UINT32)((UINT32)&bopcode | 1)); }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuGetContext(HANDLE thread, HANDLE process, void* unknown, ARM_CONTEXT* ctx) { return NtQueryInformationThread_alternative(thread, ThreadWow64Context, ctx, sizeof(*ctx), NULL); }
-	__declspec(dllexport) NTSTATUS WINAPI BTCpuProcessInit(void) { if ((ULONG_PTR)BTCpuProcessInit >> 32) { return STATUS_INVALID_ADDRESS; } return STATUS_SUCCESS; }
+	__declspec(dllexport) NTSTATUS WINAPI BTCpuProcessInit(void) {
+		struct kvm_one_reg reg_one;
+		DWORD Tmp;
+		if ((ULONG_PTR)BTCpuProcessInit >> 32) { return STATUS_INVALID_ADDRESS; }
+		VirtualProtect(bopcode, sizeof(bopcode), PAGE_EXECUTE_READWRITE, &Tmp);
+		FlushInstructionCache(GetCurrentProcess(), bopcode, sizeof(bopcode));
+		VirtualProtect(unixbopcode, sizeof(unixbopcode), PAGE_EXECUTE_READWRITE, &Tmp);
+		FlushInstructionCache(GetCurrentProcess(), unixbopcode, sizeof(unixbopcode));
+		return STATUS_SUCCESS;
+	}
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuThreadInit(void) { return STATUS_SUCCESS; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuResetToConsistentState(EXCEPTION_POINTERS* ptrs) { return STATUS_SUCCESS; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuSetContext(HANDLE thread, HANDLE process, void* unknown, ARM_CONTEXT* ctx) { return NtSetInformationThread_alternative(thread, ThreadWow64Context, ctx, sizeof(*ctx)); }
@@ -617,19 +711,19 @@ extern "C" {
 		struct kvm_vcpu_init init;
 		RtlWow64GetCurrentCpuArea(NULL, (void**)&wow_context, NULL);
 		if (kvmfd == 0) { kvmfd = open("/dev/kvm", 0, O_RDWR | O_CLOEXEC); }
-		if (kvmfd <= 0) { kvmfd = 0; printf("Opening \"/dev/kvm\" Failed\n"); return; }
+		if (kvmfd <= 0) { kvmfd = 0; printf("Opening \"/dev/kvm\" Failed\nErrcode:%d\n", kvmfd); return; }
 		int api_ver = ioctl(kvmfd, KVM_GET_API_VERSION, 0);
 	emuresume:
 		if (vmfd == 0) {
 			vmfd = ioctl(kvmfd, KVM_CREATE_VM, KVM_VM_TYPE_ARM_IPA_SIZE(32));
-			if (vmfd < 0) { vmfd = 0; printf("KVM_CREATE_VM Failed\n"); return; }
+			if (vmfd < 0) { vmfd = 0; printf("KVM_CREATE_VM Failed\nErrcode:%d\n", vmfd); return; }
 			region.slot = 0;
 			region.flags = 0;
 			region.guest_phys_addr = 0x10000;
 			region.memory_size = 0x100000000 - 0x10000;
 			region.userspace_addr = 0x10000;
-			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
-				printf("KVM_SET_USER_MEMORY_REGION Failed\n");
+			if ((ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region)) < 0) {
+				printf("KVM_SET_USER_MEMORY_REGION Failed\nErrcode:%d\n", ret);
 				return;
 			}
 		}
@@ -644,13 +738,11 @@ vcpuidunusedxp:
 		if (!ret) {
 			init.target = preferred.target;
 		}
-		init.features[0] = (1 << KVM_ARM_VCPU_EL1_32BIT);
-		if (ret >= 0) {
-			ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, (UINT64)&init);
-			if (ret < 0) {
-				printf("KVM_ARM_VCPU_INIT Failed\nErrcode:%d\n", ret);
-				return;
-			}
+		init.features[0] |= (1 << KVM_ARM_VCPU_EL1_32BIT);
+		ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, (UINT64)&init);
+		if (ret < 0) {
+			printf("KVM_ARM_VCPU_INIT Failed\nErrcode:%d\n", ret);
+			return;
 		}
 		size_t vcpu_mmap_size = ioctl(kvmfd, KVM_GET_VCPU_MMAP_SIZE, NULL);
 		struct kvm_run* run = (struct kvm_run*)mmap(0,
@@ -660,40 +752,37 @@ vcpuidunusedxp:
 			vcpufd, 0);
 		UINT8 svctype = 0;
 		bool emustopped = false;
-		if (ioctl(vcpufd, KVM_GET_REGS, (unsigned int)&regs) >= 0) {
-			regs.regs.regs[0] = wow_context->R0;
-			regs.regs.regs[1] = wow_context->R1;
-			regs.regs.regs[2] = wow_context->R2;
-			regs.regs.regs[3] = wow_context->R3;
-			regs.regs.regs[4] = wow_context->R4;
-			regs.regs.regs[5] = wow_context->R5;
-			regs.regs.regs[6] = wow_context->R6;
-			regs.regs.regs[7] = wow_context->R7;
-			regs.regs.regs[8] = wow_context->R8;
-			regs.regs.regs[9] = wow_context->R9;
-			regs.regs.regs[10] = wow_context->R10;
-			regs.regs.regs[11] = wow_context->R11;
-			regs.regs.regs[12] = wow_context->R12;
-			regs.regs.regs[13] = wow_context->Sp;
-			regs.regs.regs[14] = wow_context->Lr;
-			regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
-			regs.regs.pstate = wow_context->Cpsr | 0x1f | ((wow_context->Pc&1) << 5);
-			regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
-			regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
-			for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
-			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x1f | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-			regs.spsr[1] = (regs.regs.pstate & 0x1C0) | 0x17 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-			regs.spsr[2] = (regs.regs.pstate & 0x1C0) | 0x1b | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-			regs.spsr[3] = (regs.regs.pstate & 0x1C0) | 0x12 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-			regs.spsr[4] = (regs.regs.pstate & 0x1C0) | 0x11 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-			if (ioctl(vcpufd, KVM_SET_REGS, (unsigned int)&regs) < 0) { return; }
-		}
-		else { return; }
+		regs.regs.regs[0] = wow_context->R0;
+		regs.regs.regs[1] = wow_context->R1;
+		regs.regs.regs[2] = wow_context->R2;
+		regs.regs.regs[3] = wow_context->R3;
+		regs.regs.regs[4] = wow_context->R4;
+		regs.regs.regs[5] = wow_context->R5;
+		regs.regs.regs[6] = wow_context->R6;
+		regs.regs.regs[7] = wow_context->R7;
+		regs.regs.regs[8] = wow_context->R8;
+		regs.regs.regs[9] = wow_context->R9;
+		regs.regs.regs[10] = wow_context->R10;
+		regs.regs.regs[11] = wow_context->R11;
+		regs.regs.regs[12] = wow_context->R12;
+		regs.regs.regs[13] = wow_context->Sp;
+		regs.regs.regs[14] = wow_context->Lr;
+		regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
+		regs.regs.pstate = wow_context->Cpsr | 0x1f | ((wow_context->Pc & 1) << 5);
+		regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
+		regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
+		for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
+		regs.spsr[0] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1f | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[1] = (regs.regs.pstate & 0xFFFFFFE0) | 0x17 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[2] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1b | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[3] = (regs.regs.pstate & 0xFFFFFFE0) | 0x12 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[4] = (regs.regs.pstate & 0xFFFFFFE0) | 0x11 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 		while (emustopped == false) {
-			ioctl(vcpufd, KVM_RUN, NULL);
+			execute_vcpu(vcpufd, &regs);
 			switch (run->exit_reason) {
 			case KVM_EXIT_HYPERCALL:
 				svctype = run->hypercall.nr;
+				printf("%08X\n", svctype);
 				emustopped = true;
 				break;
 			default:
@@ -704,28 +793,25 @@ vcpuidunusedxp:
 				break;
 			}
 		}
-		if (ioctl(vcpufd, KVM_GET_REGS, (unsigned int)&regs) >= 0) {
-			wow_context->R0 = regs.regs.regs[0];
-			wow_context->R1 = regs.regs.regs[1];
-			wow_context->R2 = regs.regs.regs[2];
-			wow_context->R3 = regs.regs.regs[3];
-			wow_context->R4 = regs.regs.regs[4];
-			wow_context->R5 = regs.regs.regs[5];
-			wow_context->R6 = regs.regs.regs[6];
-			wow_context->R7 = regs.regs.regs[7];
-			wow_context->R8 = regs.regs.regs[8];
-			wow_context->R9 = regs.regs.regs[9];
-			wow_context->R10 = regs.regs.regs[10];
-			wow_context->R11 = regs.regs.regs[11];
-			wow_context->R12 = regs.regs.regs[12];
-			wow_context->Sp = regs.regs.regs[13];
-			wow_context->Lr = regs.regs.regs[14];
-			wow_context->Pc = regs.regs.pc | ((regs.regs.pstate >> 5) & 1);
-			wow_context->Cpsr = regs.regs.pstate;
-			wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
-			for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
-		}
-		else { munmap(run, sizeof(kvm_run)); return; }
+		wow_context->R0 = regs.regs.regs[0];
+		wow_context->R1 = regs.regs.regs[1];
+		wow_context->R2 = regs.regs.regs[2];
+		wow_context->R3 = regs.regs.regs[3];
+		wow_context->R4 = regs.regs.regs[4];
+		wow_context->R5 = regs.regs.regs[5];
+		wow_context->R6 = regs.regs.regs[6];
+		wow_context->R7 = regs.regs.regs[7];
+		wow_context->R8 = regs.regs.regs[8];
+		wow_context->R9 = regs.regs.regs[9];
+		wow_context->R10 = regs.regs.regs[10];
+		wow_context->R11 = regs.regs.regs[11];
+		wow_context->R12 = regs.regs.regs[12];
+		wow_context->Sp = regs.regs.regs[13];
+		wow_context->Lr = regs.regs.regs[14];
+		wow_context->Pc = (regs.regs.pc) | ((regs.regs.pstate >> 5) & 1);
+		wow_context->Cpsr = regs.regs.pstate;
+		wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
+		for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
 		munmap(run, sizeof(kvm_run));
 		close(vcpufd);
 		close(vmfd);
@@ -737,19 +823,19 @@ vcpuidunusedxp:
 	switch (svctype) {
 	case 1:
 		p = (UINT32*)wow_context->Sp;
+		wow_context->R0 = Wow64SystemServiceEx(wow_context->R12, (UINT*)p);
 		wow_context->Pc = wow_context->Lr;
 		wow_context->Lr = wow_context->R3;
 		wow_context->Sp += 4 * 4;
-		wow_context->R0 = Wow64SystemServiceEx(wow_context->R12, (UINT*)p);
 		goto emuresume;
 		break;
 	case 2:
-		wow_context->Pc = wow_context->Lr;
 		if (p__wine_unix_call != 0) {
 			p = (UINT32*)wow_context->R0;
 			wow_context->R0 = p__wine_unix_call((*(UINT64*)((void*)&p[0])), wow_context->R2, ULongToPtr(wow_context->R3));
 		}
 		else { wow_context->R0 = -1; }
+		wow_context->Pc = wow_context->Lr;
 		goto emuresume;
 		break;
 	case 3:
