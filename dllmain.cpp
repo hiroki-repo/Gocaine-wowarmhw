@@ -95,7 +95,7 @@ svc #0
 ret
 */
 char ioctl_inst_data[] = { 0xA8,0x03,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
-int (*ioctl)(unsigned int, unsigned int, unsigned int) = ((int (*)(unsigned int, unsigned int, unsigned int)) & ioctl_inst_data);
+int (*ioctl)(unsigned int, UINT64, UINT64) = ((int (*)(unsigned int, UINT64, UINT64)) & ioctl_inst_data);
 /*
 mov x8,#222
 svc #0
@@ -596,14 +596,12 @@ struct kvm_userspace_memory_region2 {
 #endif
 
 int kvmfd = 0;
-int vmfd = 0;
-bool isfirsttimeofvmfdinit = true;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-	__declspec(dllexport) void* WINAPI BTCpuGetBopCode(void) { return (UINT32*)&bopcode; }
+	__declspec(dllexport) void* WINAPI BTCpuGetBopCode(void) { return (UINT32*)((UINT32)((UINT32)&bopcode | 1)); }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuGetContext(HANDLE thread, HANDLE process, void* unknown, ARM_CONTEXT* ctx) { return NtQueryInformationThread_alternative(thread, ThreadWow64Context, ctx, sizeof(*ctx), NULL); }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuProcessInit(void) { if ((ULONG_PTR)BTCpuProcessInit >> 32) { return STATUS_INVALID_ADDRESS; } return STATUS_SUCCESS; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuThreadInit(void) { return STATUS_SUCCESS; }
@@ -613,27 +611,47 @@ extern "C" {
 		ARM_CONTEXT* wow_context;
 		struct kvm_regs regs;
 		NTSTATUS ret;
+		int vmfd = 0;
+		struct kvm_userspace_memory_region region;
+		struct kvm_vcpu_init preferred;
+		struct kvm_vcpu_init init;
 		RtlWow64GetCurrentCpuArea(NULL, (void**)&wow_context, NULL);
-		if (kvmfd == 0) { kvmfd = open("/dev/kvm", O_RDWR | O_CLOEXEC, 0); }
-		if (kvmfd < 0) { kvmfd = 0; return; }
+		if (kvmfd == 0) { kvmfd = open("/dev/kvm", 0, O_RDWR | O_CLOEXEC); }
+		if (kvmfd <= 0) { kvmfd = 0; printf("Opening \"/dev/kvm\" Failed\n"); return; }
 		int api_ver = ioctl(kvmfd, KVM_GET_API_VERSION, 0);
-		if (vmfd == 0) { vmfd = ioctl(kvmfd, KVM_CREATE_VM, 0); }
-		if (vmfd < 0) { isfirsttimeofvmfdinit = true; vmfd = 0; return; }
-		if (vmfd != 0 && isfirsttimeofvmfdinit == true) {
-			struct kvm_userspace_memory_region region;
+	emuresume:
+		if (vmfd == 0) {
+			vmfd = ioctl(kvmfd, KVM_CREATE_VM, KVM_VM_TYPE_ARM_IPA_SIZE(32));
+			if (vmfd < 0) { vmfd = 0; printf("KVM_CREATE_VM Failed\n"); return; }
 			region.slot = 0;
 			region.flags = 0;
-			region.guest_phys_addr = 0;
-			region.memory_size = 0x100000000;
-			region.userspace_addr = 0;
-			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (unsigned int)&region) < 0) {
+			region.guest_phys_addr = 0x10000;
+			region.memory_size = 0x100000000 - 0x10000;
+			region.userspace_addr = 0x10000;
+			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
+				printf("KVM_SET_USER_MEMORY_REGION Failed\n");
 				return;
 			}
-			isfirsttimeofvmfdinit = false;
 		}
-emuresume:
-		int vcpufd = ioctl(vmfd, KVM_CREATE_VCPU, 0);
-		if (vcpufd < 0) return;
+		int vcpuidunusedx = 0;
+vcpuidunusedxp:
+		int vcpufd = ioctl(vmfd, KVM_CREATE_VCPU, vcpuidunusedx);
+		if (vcpufd == -17) { vcpuidunusedx++; goto vcpuidunusedxp; }
+		if (vcpufd < 0) { printf("KVM_CREATE_VCPU Failed\nErrcode:%d\n", vcpufd); return; }
+		init.target = KVM_ARM_TARGET_GENERIC_V8;
+		ret = ioctl(vmfd, KVM_ARM_PREFERRED_TARGET, (UINT64)&preferred);
+		for (int cnt = 0; cnt < 7; cnt++) { init.features[cnt] = preferred.features[cnt]; }
+		if (!ret) {
+			init.target = preferred.target;
+		}
+		init.features[0] = (1 << KVM_ARM_VCPU_EL1_32BIT);
+		if (ret >= 0) {
+			ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, (UINT64)&init);
+			if (ret < 0) {
+				printf("KVM_ARM_VCPU_INIT Failed\nErrcode:%d\n", ret);
+				return;
+			}
+		}
 		size_t vcpu_mmap_size = ioctl(kvmfd, KVM_GET_VCPU_MMAP_SIZE, NULL);
 		struct kvm_run* run = (struct kvm_run*)mmap(0,
 			vcpu_mmap_size,
@@ -663,7 +681,11 @@ emuresume:
 			regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
 			regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
 			for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
-			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x1f;
+			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x1f | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+			regs.spsr[1] = (regs.regs.pstate & 0x1C0) | 0x17 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+			regs.spsr[2] = (regs.regs.pstate & 0x1C0) | 0x1b | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+			regs.spsr[3] = (regs.regs.pstate & 0x1C0) | 0x12 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+			regs.spsr[4] = (regs.regs.pstate & 0x1C0) | 0x11 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 			if (ioctl(vcpufd, KVM_SET_REGS, (unsigned int)&regs) < 0) { return; }
 		}
 		else { return; }
@@ -671,9 +693,14 @@ emuresume:
 			ioctl(vcpufd, KVM_RUN, NULL);
 			switch (run->exit_reason) {
 			case KVM_EXIT_HYPERCALL:
+				svctype = run->hypercall.nr;
 				emustopped = true;
 				break;
 			default:
+				if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
+					svctype = 3;
+					emustopped = true;
+				}
 				break;
 			}
 		}
@@ -701,29 +728,37 @@ emuresume:
 		else { munmap(run, sizeof(kvm_run)); return; }
 		munmap(run, sizeof(kvm_run));
 		close(vcpufd);
-		UINT32 hvctmp = (*(UINT32*)(wow_context->Pc & 0xFFFFFFFE));
-		svctype = (((hvctmp>>8)&0xFF) | (((hvctmp >> 0) & 0xF) << 8) | (((hvctmp >> 24) & 0xF) << 12));
+		close(vmfd);
+		vcpufd = 0; vmfd = 0;
+		//UINT32 hvctmp = (*(UINT32*)(wow_context->Pc & 0xFFFFFFFE));
+		//svctype = (((hvctmp>>8)&0xFF) | (((hvctmp >> 0) & 0xF) << 8) | (((hvctmp >> 24) & 0xF) << 12));
+		//printf("%08X\n", hvctmp);
+		UINT32* p = 0;
 	switch (svctype) {
 	case 1:
-		wow_context->R0 = Wow64SystemServiceEx(wow_context->R12, (UINT*)ULongToPtr(wow_context->Sp));
+		p = (UINT32*)wow_context->Sp;
 		wow_context->Pc = wow_context->Lr;
 		wow_context->Lr = wow_context->R3;
 		wow_context->Sp += 4 * 4;
+		wow_context->R0 = Wow64SystemServiceEx(wow_context->R12, (UINT*)p);
 		goto emuresume;
 		break;
 	case 2:
+		wow_context->Pc = wow_context->Lr;
 		if (p__wine_unix_call != 0) {
-			UINT32* p = (UINT32*)wow_context->R0;
+			p = (UINT32*)wow_context->R0;
 			wow_context->R0 = p__wine_unix_call((*(UINT64*)((void*)&p[0])), wow_context->R2, ULongToPtr(wow_context->R3));
 		}
 		else { wow_context->R0 = -1; }
-		wow_context->Pc = wow_context->Lr;
+		goto emuresume;
+		break;
+	case 3:
 		goto emuresume;
 		break;
 	}
 	return;
 	}
-	__declspec(dllexport) void* WINAPI __wine_get_unix_opcode(void) { return (UINT32*)&unixbopcode; }
+	__declspec(dllexport) void* WINAPI __wine_get_unix_opcode(void) { return (UINT32*)((UINT32)((UINT32)&unixbopcode | 1)); }
 	__declspec(dllexport) BOOLEAN WINAPI BTCpuIsProcessorFeaturePresent(UINT feature) { if (feature == 2 || feature == 3 || feature == 6 || feature == 7 || feature == 8 || feature == 10 || feature == 13 || feature == 17 || feature == 36 || feature == 37 || feature == 38) { return true; } return false; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuTurboThunkControl(ULONG enable) { if (enable) { return STATUS_NOT_SUPPORTED; } return STATUS_SUCCESS; }
 
