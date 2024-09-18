@@ -102,7 +102,21 @@ svc #0
 ret
 */
 char mmap_inst_data[] = { 0xC8,0x1B,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
-int (*mmap)(void*, size_t, int, int, int, unsigned int) = ((int (*)(void*, size_t, int, int, int, unsigned int)) & mmap_inst_data);
+void* (*mmap)(void*, size_t, int, int, int, unsigned int) = ((void* (*)(void*, size_t, int, int, int, unsigned int)) & mmap_inst_data);
+/*
+mov x8,#215
+svc #0
+ret
+*/
+char munmap_inst_data[] = { 0xE8,0x1A,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+int (*munmap)(void*, size_t) = ((int (*)(void*, size_t)) & munmap_inst_data);
+/*
+mov x8,#57
+svc #0
+ret
+*/
+char close_inst_data[] = { 0x28,0x07,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+int (*close)(unsigned int) = ((int (*)(unsigned int)) & close_inst_data);
 
 
 extern char modulename4this[4096];
@@ -188,9 +202,13 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 		VirtualProtect(ioctl_inst_data, sizeof(ioctl_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
         VirtualProtect(open_inst_data, sizeof(open_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(mmap_inst_data, sizeof(mmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
+		VirtualProtect(munmap_inst_data, sizeof(munmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
+		VirtualProtect(close_inst_data, sizeof(close_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		FlushInstructionCache(GetCurrentProcess(), ioctl_inst_data, sizeof(ioctl_inst_data));
         FlushInstructionCache(GetCurrentProcess(), open_inst_data, sizeof(open_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), mmap_inst_data, sizeof(mmap_inst_data));
+		FlushInstructionCache(GetCurrentProcess(), munmap_inst_data, sizeof(munmap_inst_data));
+		FlushInstructionCache(GetCurrentProcess(), close_inst_data, sizeof(close_inst_data));
 	case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
@@ -288,6 +306,7 @@ struct I386_CONTEXT {
 #define ARM_MAX_BREAKPOINTS     8
 #define ARM_MAX_WATCHPOINTS     1
 
+#if 0
 typedef struct _IMAGE_ARM_RUNTIME_FUNCTION
 {
 	DWORD BeginAddress;
@@ -318,6 +337,7 @@ typedef struct _SCOPE_TABLE_ARM
 		DWORD JumpTarget;
 	} ScopeRecord[1];
 } SCOPE_TABLE_ARM, * PSCOPE_TABLE_ARM;
+#endif
 
 typedef struct _ARM_NEON128
 {
@@ -575,6 +595,10 @@ struct kvm_userspace_memory_region2 {
 };
 #endif
 
+int kvmfd = 0;
+int vmfd = 0;
+bool isfirsttimeofvmfdinit = true;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -590,20 +614,24 @@ extern "C" {
 		struct kvm_regs regs;
 		NTSTATUS ret;
 		RtlWow64GetCurrentCpuArea(NULL, (void**)&wow_context, NULL);
-		int kvmfd = open("/dev/kvm", O_RDWR | O_CLOEXEC, 0);
-		if (kvmfd < 0) return;
+		if (kvmfd == 0) { kvmfd = open("/dev/kvm", O_RDWR | O_CLOEXEC, 0); }
+		if (kvmfd < 0) { kvmfd = 0; return; }
 		int api_ver = ioctl(kvmfd, KVM_GET_API_VERSION, 0);
-		int vmfd = ioctl(kvmfd, KVM_CREATE_VM, 0);
-		if (vmfd < 0) return;
-		struct kvm_userspace_memory_region region;
-		region.slot = 0;
-		region.flags = 0;
-		region.guest_phys_addr = 0;
-		region.memory_size = 0x100000000;
-		region.userspace_addr = 0;
-		if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (unsigned int)&region) < 0) {
-			return;
+		if (vmfd == 0) { vmfd = ioctl(kvmfd, KVM_CREATE_VM, 0); }
+		if (vmfd < 0) { isfirsttimeofvmfdinit = true; vmfd = 0; return; }
+		if (vmfd != 0 && isfirsttimeofvmfdinit == true) {
+			struct kvm_userspace_memory_region region;
+			region.slot = 0;
+			region.flags = 0;
+			region.guest_phys_addr = 0;
+			region.memory_size = 0x100000000;
+			region.userspace_addr = 0;
+			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (unsigned int)&region) < 0) {
+				return;
+			}
+			isfirsttimeofvmfdinit = false;
 		}
+emuresume:
 		int vcpufd = ioctl(vmfd, KVM_CREATE_VCPU, 0);
 		if (vcpufd < 0) return;
 		size_t vcpu_mmap_size = ioctl(kvmfd, KVM_GET_VCPU_MMAP_SIZE, NULL);
@@ -612,7 +640,6 @@ extern "C" {
 			PROT_READ | PROT_WRITE,
 			MAP_SHARED,
 			vcpufd, 0);
-emuresume:
 		UINT8 svctype = 0;
 		bool emustopped = false;
 		if (ioctl(vcpufd, KVM_GET_REGS, (unsigned int)&regs) >= 0) {
@@ -632,10 +659,11 @@ emuresume:
 			regs.regs.regs[13] = wow_context->Sp;
 			regs.regs.regs[14] = wow_context->Lr;
 			regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
-			regs.regs.pstate = wow_context->Cpsr | 0x1f | ((wow_context->Pc&1) << 5);
+			regs.regs.pstate = wow_context->Cpsr | 0x10 | ((wow_context->Pc&1) << 5);
 			regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
 			regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
 			for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
+			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x10;
 			if (ioctl(vcpufd, KVM_SET_REGS, (unsigned int)&regs) < 0) { return; }
 		}
 		else { return; }
@@ -646,6 +674,7 @@ emuresume:
 				emustopped = true;
 				break;
 			default:
+				break;
 			}
 		}
 		if (ioctl(vcpufd, KVM_GET_REGS, (unsigned int)&regs) >= 0) {
@@ -669,7 +698,9 @@ emuresume:
 			wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
 			for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
 		}
-		else { return; }
+		else { munmap(run, sizeof(kvm_run)); return; }
+		munmap(run, sizeof(kvm_run));
+		close(vcpufd);
 		UINT32 hvctmp = (*(UINT32*)(wow_context->Pc & 0xFFFFFFFE));
 		svctype = (((hvctmp>>8)&0xFF) | (((hvctmp >> 0) & 0xF) << 8) | (((hvctmp >> 24) & 0xF) << 12));
 	switch (svctype) {
