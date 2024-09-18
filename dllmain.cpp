@@ -659,11 +659,11 @@ emuresume:
 			regs.regs.regs[13] = wow_context->Sp;
 			regs.regs.regs[14] = wow_context->Lr;
 			regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
-			regs.regs.pstate = wow_context->Cpsr | 0x10 | ((wow_context->Pc&1) << 5);
+			regs.regs.pstate = wow_context->Cpsr | 0x1f | ((wow_context->Pc&1) << 5);
 			regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
 			regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
 			for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
-			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x10;
+			regs.spsr[0] = (regs.regs.pstate & 0x1C0) | 0x1f;
 			if (ioctl(vcpufd, KVM_SET_REGS, (unsigned int)&regs) < 0) { return; }
 		}
 		else { return; }
