@@ -223,6 +223,7 @@ struct __uint128_t { UINT64 q[2]; };
 
 #pragma warning(disable:4996)
 
+#ifdef _M_ARM64
 /*
 mov x8,#56
 mov x3,x2
@@ -262,6 +263,95 @@ ret
 */
 char close_inst_data[] = { 0x28,0x07,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 int (*close)(unsigned int) = ((int (*)(unsigned int)) & close_inst_data);
+#else
+#ifdef _M_AMD64
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,2
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char open_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x02,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+int (*open)(const char*, int, int) = ((int (*)(const char*, int, int)) & open_inst_data);
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,16
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char ioctl_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x10,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+int (*ioctl)(unsigned int, UINT64, UINT64) = ((int (*)(unsigned int, UINT64, UINT64)) & ioctl_inst_data);
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,9
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char mmap_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x09,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+void* (*mmap)(void*, size_t, int, int, int, unsigned int) = ((void* (*)(void*, size_t, int, int, int, unsigned int)) & mmap_inst_data);
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,11
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char munmap_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x0B,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+int (*munmap)(void*, size_t) = ((int (*)(void*, size_t)) & munmap_inst_data);
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,3
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char close_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x03,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+int (*close)(unsigned int) = ((int (*)(unsigned int)) & close_inst_data);
+#endif
+#endif
 
 
 extern char modulename4this[4096];
@@ -529,8 +619,8 @@ typedef struct _ARM_CONTEXT
 	ULONG Padding2[2];              /* 198 */
 } ARM_CONTEXT;
 
-char bopcode[] = { 0xE0,0xF7,0x01,0x80,0xf7,0x46 };
-char unixbopcode[] = { 0xE0,0xF7,0x02,0x80,0xf7,0x46 };
+char bopcode[] = { 0x01,0xdf,0xf7,0x46 };
+char unixbopcode[] = { 0x02,0xdf,0xf7,0x46 };
 #ifndef ThreadWow64Context
 #define ThreadWow64Context (THREADINFOCLASS)0x1d
 #endif
@@ -751,8 +841,11 @@ int kvmfd = 0;
 #define AARCH64_SIMD_CTRL_REG(x)   (KVM_REG_ARM64 | KVM_REG_SIZE_U32 | \
                  KVM_REG_ARM_CORE | KVM_REG_ARM_CORE_REG(x))
 
+#define ARM64_32_SYS_REG(op0,op1,crn,crm,op2) (__ARM64_SYS_REG(op0,op1,crn,crm,op2) | KVM_REG_SIZE_U32)
 
-int kvm_set_one_reg(unsigned int cs, uint64_t id, void* source)
+
+
+int kvm_set_one_reg(unsigned int cs, UINT64 id, void* source)
 {
 	struct kvm_one_reg reg;
 	int r;
@@ -763,7 +856,7 @@ int kvm_set_one_reg(unsigned int cs, uint64_t id, void* source)
 	return r;
 }
 
-int kvm_get_one_reg(unsigned int cs, uint64_t id, void* target)
+int kvm_get_one_reg(unsigned int cs, UINT64 id, void* target)
 {
 	struct kvm_one_reg reg;
 	int r;
@@ -774,58 +867,77 @@ int kvm_get_one_reg(unsigned int cs, uint64_t id, void* target)
 	return r;
 }
 
-void get_kvm_regs(unsigned int run, kvm_regs *regs_tmp)
+UINT64 get_kvm_regs(unsigned int run, kvm_regs *regs_tmp)
 {
+	int r = 0;
 	struct kvm_regs regs;
 	for (int cnt = 0; cnt < 31; cnt++) {
-		kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt]);
+		if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt])) { break; }
 	}
-	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp);
-	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc);
-	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate);
-	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1);
-	kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1);
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)1 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)2 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)3 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)4 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)5 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)6 << 48); }
 	for (int cnt = 0; cnt < 5; cnt++) {
-		kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt]);
+		if (r = kvm_get_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt])) { break; }
 	}
-	for (int cnt = 0; cnt < 16; cnt++) {
-		kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt].q[0]), &regs.fp_regs.vregs[cnt]);
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)7 << 48); }
+	for (int cnt = 0; cnt < 32; cnt++) {
+		if (r = kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt]), &regs.fp_regs.vregs[cnt])) { break; }
 	}
-	kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr);
-	kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr);
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)8 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)9 << 48); }
+	if (r = kvm_get_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)10 << 48); }
 	memcpy((void*)regs_tmp, &regs, sizeof(kvm_regs));
-	return;
+	return ((UINT64)r & (UINT64)0xFFFFFFFF);
 }
-void set_kvm_regs(unsigned int run, kvm_regs* regs_tmp)
+
+UINT64 set_kvm_regs(unsigned int run, kvm_regs* regs_tmp)
 {
+	int r = 0;
 	struct kvm_regs regs;
 	memcpy(&regs, (void*)regs_tmp, sizeof(kvm_regs));
 	for (int cnt = 0; cnt < 31; cnt++) {
-		kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt]);
+		if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.regs[cnt]), &regs.regs.regs[cnt])) { break; }
 	}
-	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp);
-	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc);
-	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate);
-	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1);
-	kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1);
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)1 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.sp), &regs.regs.sp)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)2 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pc), &regs.regs.pc)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)3 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(regs.pstate), &regs.regs.pstate)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)4 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(sp_el1), &regs.sp_el1)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)5 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(elr_el1), &regs.elr_el1)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)6 << 48); }
 	for (int cnt = 0; cnt < 5; cnt++) {
-		kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt]);
+		if (r = kvm_set_one_reg((UINT32)run, AARCH64_CORE_REG(spsr[cnt]), &regs.spsr[cnt])) { break; }
 	}
-	for (int cnt = 0; cnt < 16; cnt++) {
-		kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt].q[0]), &regs.fp_regs.vregs[cnt]);
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)7 << 48); }
+	for (int cnt = 0; cnt < 32; cnt++) {
+		if (r = kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CORE_REG(fp_regs.vregs[cnt]), &regs.fp_regs.vregs[cnt])) { break; }
 	}
-	kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr);
-	kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr);
-	return;
+	if (r) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)8 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpsr), &regs.fp_regs.fpsr)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)9 << 48); }
+	if (r = kvm_set_one_reg((UINT32)run, AARCH64_SIMD_CTRL_REG(fp_regs.fpcr), &regs.fp_regs.fpcr)) { return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)10 << 48); }
+	return ((UINT64)r & (UINT64)0xFFFFFFFF);
 }
 
-void execute_vcpu(unsigned int vcpufd, kvm_regs* regs)
+UINT32* interruptvect;
+
+const char regtypeno[16][64] = { "none","REG","SP","PC","PSTATE","SP_EL1","ELR_EL1","SPSR","VREG","FPSR","FPCR" };
+
+UINT64 execute_vcpu(unsigned int vcpufd, kvm_regs* regs)
 {
-	set_kvm_regs(vcpufd, regs);
-	ioctl(vcpufd, KVM_RUN, NULL);
-	get_kvm_regs(vcpufd, regs);
-	return;
+	UINT64 r = 0;
+	if (r = set_kvm_regs(vcpufd, regs)) { return r | ((UINT64)1 << 32); }
+	if (r = ioctl(vcpufd, KVM_RUN, NULL)) { get_kvm_regs(vcpufd, regs); return ((UINT64)r & (UINT64)0xFFFFFFFF) | ((UINT64)2 << 32); }
+	if (r = get_kvm_regs(vcpufd, regs)) { return r | ((UINT64)4 << 32); }
+	return 0;
 }
+
+/*
+hvc #4
+*/
+UINT8 svchandl[] = { 0x82,0x00,0x00,0xD4 };
 
 #ifdef __cplusplus
 extern "C" {
@@ -841,6 +953,13 @@ extern "C" {
 		FlushInstructionCache(GetCurrentProcess(), bopcode, sizeof(bopcode));
 		VirtualProtect(unixbopcode, sizeof(unixbopcode), PAGE_EXECUTE_READWRITE, &Tmp);
 		FlushInstructionCache(GetCurrentProcess(), unixbopcode, sizeof(unixbopcode));
+		interruptvect = (UINT32*)VirtualAlloc((LPVOID)0x6bff0000,4096,0x3000,0x40);
+		if (((UINT64)interruptvect >> 32)) { return STATUS_INVALID_ADDRESS; }
+		if (interruptvect == 0) { return STATUS_MEMORY_NOT_ALLOCATED; }
+		else {
+			interruptvect[0] = 0;
+			interruptvect[2] = (UINT32)&svchandl;
+		}
 		return STATUS_SUCCESS;
 	}
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuThreadInit(void) { return STATUS_SUCCESS; }
@@ -884,6 +1003,7 @@ vcpuidunusedxp:
 			init.target = preferred.target;
 		}
 		init.features[0] |= (1 << KVM_ARM_VCPU_EL1_32BIT);
+		init.features[0] &= ~(1 << KVM_ARM_VCPU_HAS_EL2);
 		ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, (UINT64)&init);
 		if (ret < 0) {
 			printf("KVM_ARM_VCPU_INIT Failed\nErrcode:%d\n", ret);
@@ -895,6 +1015,19 @@ vcpuidunusedxp:
 			PROT_READ | PROT_WRITE,
 			MAP_SHARED,
 			vcpufd, 0);
+
+		UINT64 CPACR_EL1tmp = ((UINT64)0x0000000000300000);
+		UINT64 VBAR_EL1tmp = (UINT32)interruptvect;
+		ret = kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 1, 0, 2), &CPACR_EL1tmp);
+		if (ret < 0) {
+			printf("KVM_SET_ONE_REG(CPACR_EL1) Failed\nErrcode:%d\n", ret);
+			return;
+		}
+		ret = kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 12, 0, 0), &VBAR_EL1tmp);
+		if (ret < 0) {
+			printf("KVM_SET_ONE_REG(VBAR_EL1) Failed\nErrcode:%d\n", ret);
+			return;
+		}
 		UINT8 svctype = 0;
 		bool emustopped = false;
 		regs.regs.regs[0] = wow_context->R0;
@@ -913,7 +1046,7 @@ vcpuidunusedxp:
 		regs.regs.regs[13] = wow_context->Sp;
 		regs.regs.regs[14] = wow_context->Lr;
 		regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
-		regs.regs.pstate = wow_context->Cpsr | 0x1f | ((wow_context->Pc & 1) << 5);
+		regs.regs.pstate = wow_context->Cpsr | 0x10 | ((wow_context->Pc & 1) << 5);
 		regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
 		regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
 		for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
@@ -922,8 +1055,9 @@ vcpuidunusedxp:
 		regs.spsr[2] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1b | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 		regs.spsr[3] = (regs.regs.pstate & 0xFFFFFFE0) | 0x12 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 		regs.spsr[4] = (regs.regs.pstate & 0xFFFFFFE0) | 0x11 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		UINT64 ret64 = 0;
 		while (emustopped == false) {
-			execute_vcpu(vcpufd, &regs);
+			if (ret64 = execute_vcpu(vcpufd, &regs)) { break; }
 			switch (run->exit_reason) {
 			case KVM_EXIT_HYPERCALL:
 				svctype = run->hypercall.nr;
@@ -936,6 +1070,22 @@ vcpuidunusedxp:
 					emustopped = true;
 				}
 				break;
+			}
+		}
+		//printf("%08X\n", (UINT32)regs.regs.pc);
+		//printf("%08X\n", (UINT32)regs.regs.regs[14]);
+		printf("%08X%08X\n", (UINT32)(ret64 >> 32), (UINT32)(ret64 >> 0));
+		//for (int cnt = 0; cnt < 14; cnt++) { printf("R%d:%08X\n", cnt, (UINT32)regs.regs.regs[14]); }
+		if (ret64) {
+			if ((ret64 >> 32) & 1) { 
+				printf("KVM_SET_ONE_REG Failed\nREGTYPE:%s\nErrcode:%d\n", (&regtypeno[((ret64 >> 48) & 0xF)]), ((int)(ret64 & 0xFFFFFFFF)));
+				return;
+			} else if ((ret64 >> 32) & 2) { 
+				printf("KVM_RUN Failed\nErrcode:%d\n", ((int)(ret64 & 0xFFFFFFFF)));
+				return;
+			} else if ((ret64 >> 32) & 4) {
+				printf("KVM_GET_ONE_REG Failed\nREGTYPE:%s\nErrcode:%d\n", (&regtypeno[((ret64 >> 48) & 0xF)]), ((int)(ret64 & 0xFFFFFFFF)));
+				return;
 			}
 		}
 		wow_context->R0 = regs.regs.regs[0];

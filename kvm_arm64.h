@@ -54,6 +54,10 @@ struct kvm_regs {
 
 	__u64	spsr[KVM_NR_SPSR];
 
+#ifdef _MSC_BUILD
+	__u64	reservedbygocaine;
+#endif
+
 	struct user_fpsimd_state fp_regs;
 };
 
@@ -254,7 +258,7 @@ struct kvm_arm_counter_offset {
 	ARM64_SYS_REG_SHIFT_MASK(crm, CRM) | \
 	ARM64_SYS_REG_SHIFT_MASK(op2, OP2))
 
-#define ARM64_SYS_REG(...) (__ARM64_SYS_REG(__VA_ARGS__) | KVM_REG_SIZE_U64)
+#define ARM64_SYS_REG(op0,op1,crn,crm,op2) (__ARM64_SYS_REG(op0,op1,crn,crm,op2) | KVM_REG_SIZE_U64)
 
 /* Physical Timer EL0 Registers */
 #define KVM_REG_ARM_PTIMER_CTL		ARM64_SYS_REG(3, 3, 14, 2, 1)
