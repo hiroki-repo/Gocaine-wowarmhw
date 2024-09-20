@@ -619,8 +619,8 @@ typedef struct _ARM_CONTEXT
 	ULONG Padding2[2];              /* 198 */
 } ARM_CONTEXT;
 
-char bopcode[] = { 0x01,0xdf,0xf7,0x46 };
-char unixbopcode[] = { 0x02,0xdf,0xf7,0x46 };
+char bopcode[] = { 0x01,0x00,0x00,0xEF,0x0E,0xF0,0xA0,0xE1 };
+char unixbopcode[] = { 0x02,0x00,0x00,0xEF,0x0E,0xF0,0xA0,0xE1 };
 #ifndef ThreadWow64Context
 #define ThreadWow64Context (THREADINFOCLASS)0x1d
 #endif
@@ -937,13 +937,13 @@ UINT64 execute_vcpu(unsigned int vcpufd, kvm_regs* regs)
 /*
 hvc #4
 */
-UINT8 svchandl[] = { 0x82,0x00,0x00,0xD4 };
+UINT8 svchandl[] = { 0x82,0x00,0x00,0xD4,0x00,0x00,0x00,0x14 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-	__declspec(dllexport) void* WINAPI BTCpuGetBopCode(void) { return (UINT32*)((UINT32)((UINT32)&bopcode | 1)); }
+	__declspec(dllexport) void* WINAPI BTCpuGetBopCode(void) { return (UINT32*)&bopcode; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuGetContext(HANDLE thread, HANDLE process, void* unknown, ARM_CONTEXT* ctx) { return NtQueryInformationThread_alternative(thread, ThreadWow64Context, ctx, sizeof(*ctx), NULL); }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuProcessInit(void) {
 		struct kvm_one_reg reg_one;
@@ -953,13 +953,37 @@ extern "C" {
 		FlushInstructionCache(GetCurrentProcess(), bopcode, sizeof(bopcode));
 		VirtualProtect(unixbopcode, sizeof(unixbopcode), PAGE_EXECUTE_READWRITE, &Tmp);
 		FlushInstructionCache(GetCurrentProcess(), unixbopcode, sizeof(unixbopcode));
+		interruptvect = (UINT32*)0xffff0000;
+#if 0
 		interruptvect = (UINT32*)VirtualAlloc((LPVOID)0x6bff0000,4096,0x3000,0x40);
 		if (((UINT64)interruptvect >> 32)) { return STATUS_INVALID_ADDRESS; }
 		if (interruptvect == 0) { return STATUS_MEMORY_NOT_ALLOCATED; }
 		else {
-			interruptvect[0] = 0;
-			interruptvect[2] = (UINT32)&svchandl;
+			/*interruptvect[0] = 0;
+			interruptvect[11] = (UINT32)&svchandl;*/
+			//interruptvect[0x080 / 4] = 0x14000000;
+			interruptvect[0x080 / 4] = 0xB2407FEF;
+			interruptvect[0x084 / 4] = 0x394001F0;
+			interruptvect[0x088 / 4] = 0x14000000;/**/
+			/*interruptvect[0x080 / 4] = 0xD4000082;
+			interruptvect[0x084 / 4] = 0x14000000;/**/
+			/*interruptvect[0x080 / 4] = 0xE22FF001;
+			interruptvect[0x084 / 4] = 0x8004F7E0;
+			interruptvect[0x088 / 4] = 0x0000E7FE;/**/
+			/*interruptvect[0x600 / 4] = 0xE22FF001;
+			interruptvect[0x604 / 4] = 0x8004F7E0;
+			interruptvect[0x608 / 4] = 0x0000E7FE;/**/
+			/*interruptvect[0x680 / 4] = 0xE22FF001;
+			interruptvect[0x684 / 4] = 0x8004F7E0;
+			interruptvect[0x688 / 4] = 0x0000E7FE;/**/
+			/*interruptvect[0x700 / 4] = 0xE22FF001;
+			interruptvect[0x704 / 4] = 0x8004F7E0;
+			interruptvect[0x708 / 4] = 0x0000E7FE;/**/
+			/*interruptvect[0x780 / 4] = 0xE22FF001;
+			interruptvect[0x784 / 4] = 0x8004F7E0;
+			interruptvect[0x788 / 4] = 0x0000E7FE;/**/
 		}
+#endif
 		return STATUS_SUCCESS;
 	}
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuThreadInit(void) { return STATUS_SUCCESS; }
@@ -1002,8 +1026,8 @@ vcpuidunusedxp:
 		if (!ret) {
 			init.target = preferred.target;
 		}
-		init.features[0] |= (1 << KVM_ARM_VCPU_EL1_32BIT);
-		init.features[0] &= ~(1 << KVM_ARM_VCPU_HAS_EL2);
+		/*init.features[0] |= (1 << KVM_ARM_VCPU_EL1_32BIT);
+		init.features[0] &= ~(1 << KVM_ARM_VCPU_HAS_EL2);*/
 		ret = ioctl(vcpufd, KVM_ARM_VCPU_INIT, (UINT64)&init);
 		if (ret < 0) {
 			printf("KVM_ARM_VCPU_INIT Failed\nErrcode:%d\n", ret);
@@ -1018,6 +1042,8 @@ vcpuidunusedxp:
 
 		UINT64 CPACR_EL1tmp = ((UINT64)0x0000000000300000);
 		UINT64 VBAR_EL1tmp = (UINT32)interruptvect;
+		UINT64 ESR_EL1tmp = 0;
+		UINT64 FAR_EL1tmp = 0;
 		ret = kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 1, 0, 2), &CPACR_EL1tmp);
 		if (ret < 0) {
 			printf("KVM_SET_ONE_REG(CPACR_EL1) Failed\nErrcode:%d\n", ret);
@@ -1050,14 +1076,51 @@ vcpuidunusedxp:
 		regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
 		regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
 		for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
-		regs.spsr[0] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1f | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-		regs.spsr[1] = (regs.regs.pstate & 0xFFFFFFE0) | 0x17 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-		regs.spsr[2] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1b | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-		regs.spsr[3] = (regs.regs.pstate & 0xFFFFFFE0) | 0x12 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
-		regs.spsr[4] = (regs.regs.pstate & 0xFFFFFFE0) | 0x11 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[0] = (regs.regs.pstate & 0xFFFFFFE0) | 0xf | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[1] = (regs.regs.pstate & 0xFFFFFFE0) | 0x7 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[2] = (regs.regs.pstate & 0xFFFFFFE0) | 0xb | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[3] = (regs.regs.pstate & 0xFFFFFFE0) | 0x2 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
+		regs.spsr[4] = (regs.regs.pstate & 0xFFFFFFE0) | 0x1 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 		UINT64 ret64 = 0;
 		while (emustopped == false) {
-			if (ret64 = execute_vcpu(vcpufd, &regs)) { break; }
+executeinst:
+			ret64 = execute_vcpu(vcpufd, &regs);
+			if ((ret64 >> 32) & 2) {
+				if (((int)(ret64 & 0xFFFFFFFF)) == -14) {
+					//printf("%08X\n", ((UINT32)regs.regs.pc));
+					if (((UINT32)regs.regs.pc) == 0xffff0600) {
+						svctype = 3;
+						//kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 6, 0, 0), &FAR_EL1tmp);
+						kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+						//printf("%02X\n", (UINT8)((ESR_EL1tmp >> 26) & 0x3f));
+						if (((ESR_EL1tmp >> 26) & 0x3f) == 0b010001) {
+							//printf("%04X\n", (UINT16)ESR_EL1tmp);
+							svctype = (UINT16)ESR_EL1tmp;
+							break;
+						}
+						else {
+							regs.regs.pstate = (regs.regs.pstate&0xFFFFFFDF) | ((regs.elr_el1 & 1) << 5);
+							regs.regs.pc = regs.elr_el1 & 0xFFFFFFFE;
+							if ((regs.elr_el1 & 1)) { regs.regs.pc += 2; }
+							else { regs.regs.pc += 4; }
+							goto executeinst;
+						}
+					} else if ((((UINT32)regs.regs.pc) & 0xFFFFF000) == 0xffff0000) {
+						//kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+						//printf("%08X%08X\n", (UINT32)(ESR_EL1tmp >> 32), (UINT32)(ESR_EL1tmp >> 0));
+						//printf("%08X%08X\n", (UINT32)(regs.regs.regs[14] >> 32), (UINT32)(regs.regs.regs[14] >> 0));
+						//printf("%08X\n", *(UINT32*)(regs.regs.regs[14] & 0xFFFFFFFE));
+						//printf("%08X%08X\n", (UINT32)(regs.elr_el1 >> 32), (UINT32)(regs.elr_el1 >> 0));
+						//printf("%08X%08X\n%08X%08X\n", (UINT32)(regs.regs.regs[14] >> 32), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)(regs.elr_el1 >> 32), (UINT32)(regs.elr_el1 >> 0));
+						//printf("%08X\n", *(UINT32*)(regs.elr_el1 & 0xFFFFFFFE));
+						regs.regs.pstate = (regs.regs.pstate & 0xFFFFFFDF) | ((regs.elr_el1 & 1) << 5);
+						regs.regs.pc = regs.elr_el1 & 0xFFFFFFFE;
+						if ((regs.elr_el1 & 1)) { regs.regs.pc += 2; }
+						else { regs.regs.pc += 4; }
+						goto executeinst;
+					}
+				}
+			}
 			switch (run->exit_reason) {
 			case KVM_EXIT_HYPERCALL:
 				svctype = run->hypercall.nr;
@@ -1074,8 +1137,9 @@ vcpuidunusedxp:
 		}
 		//printf("%08X\n", (UINT32)regs.regs.pc);
 		//printf("%08X\n", (UINT32)regs.regs.regs[14]);
-		printf("%08X%08X\n", (UINT32)(ret64 >> 32), (UINT32)(ret64 >> 0));
+		//printf("%08X%08X\n", (UINT32)(ret64 >> 32), (UINT32)(ret64 >> 0));
 		//for (int cnt = 0; cnt < 14; cnt++) { printf("R%d:%08X\n", cnt, (UINT32)regs.regs.regs[14]); }
+#if 0
 		if (ret64) {
 			if ((ret64 >> 32) & 1) { 
 				printf("KVM_SET_ONE_REG Failed\nREGTYPE:%s\nErrcode:%d\n", (&regtypeno[((ret64 >> 48) & 0xF)]), ((int)(ret64 & 0xFFFFFFFF)));
@@ -1088,6 +1152,7 @@ vcpuidunusedxp:
 				return;
 			}
 		}
+#endif
 		wow_context->R0 = regs.regs.regs[0];
 		wow_context->R1 = regs.regs.regs[1];
 		wow_context->R2 = regs.regs.regs[2];
@@ -1104,7 +1169,7 @@ vcpuidunusedxp:
 		wow_context->Sp = regs.regs.regs[13];
 		wow_context->Lr = regs.regs.regs[14];
 		wow_context->Pc = (regs.regs.pc) | ((regs.regs.pstate >> 5) & 1);
-		wow_context->Cpsr = regs.regs.pstate;
+		wow_context->Cpsr = (regs.regs.pstate & 0xFFFFFFE0) | 0x10;
 		wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
 		for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
 		munmap(run, sizeof(kvm_run));
@@ -1139,7 +1204,7 @@ vcpuidunusedxp:
 	}
 	return;
 	}
-	__declspec(dllexport) void* WINAPI __wine_get_unix_opcode(void) { return (UINT32*)((UINT32)((UINT32)&unixbopcode | 1)); }
+	__declspec(dllexport) void* WINAPI __wine_get_unix_opcode(void) { return (UINT32*)&unixbopcode; }
 	__declspec(dllexport) BOOLEAN WINAPI BTCpuIsProcessorFeaturePresent(UINT feature) { if (feature == 2 || feature == 3 || feature == 6 || feature == 7 || feature == 8 || feature == 10 || feature == 13 || feature == 17 || feature == 36 || feature == 37 || feature == 38) { return true; } return false; }
 	__declspec(dllexport) NTSTATUS WINAPI BTCpuTurboThunkControl(ULONG enable) { if (enable) { return STATUS_NOT_SUPPORTED; } return STATUS_SUCCESS; }
 
