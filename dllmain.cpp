@@ -233,36 +233,43 @@ mov x0,#-100
 svc #0
 ret
 */
-char open_inst_data[] = { 0x08,0x07,0x80,0xD2,0xE3,0x03,0x02,0xAA,0xE2,0x03,0x01,0xAA,0xE1,0x03,0x00,0xAA,0x60,0x0C,0x80,0x92,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+__declspec(align(4)) char open_inst_data[] = { 0x08,0x07,0x80,0xD2,0xE3,0x03,0x02,0xAA,0xE2,0x03,0x01,0xAA,0xE1,0x03,0x00,0xAA,0x60,0x0C,0x80,0x92,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 int (*open)(const char*, int, int) = ((int (*)(const char*, int, int)) & open_inst_data);
 /*
 mov x8,#29
 svc #0
 ret
 */
-char ioctl_inst_data[] = { 0xA8,0x03,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+__declspec(align(4)) char ioctl_inst_data[] = { 0xA8,0x03,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 int (*ioctl)(unsigned int, UINT64, UINT64) = ((int (*)(unsigned int, UINT64, UINT64)) & ioctl_inst_data);
 /*
 mov x8,#222
 svc #0
 ret
 */
-char mmap_inst_data[] = { 0xC8,0x1B,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+__declspec(align(4)) char mmap_inst_data[] = { 0xC8,0x1B,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 void* (*mmap)(void*, size_t, int, int, int, unsigned int) = ((void* (*)(void*, size_t, int, int, int, unsigned int)) & mmap_inst_data);
 /*
 mov x8,#215
 svc #0
 ret
 */
-char munmap_inst_data[] = { 0xE8,0x1A,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+__declspec(align(4)) char munmap_inst_data[] = { 0xE8,0x1A,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 int (*munmap)(void*, size_t) = ((int (*)(void*, size_t)) & munmap_inst_data);
 /*
 mov x8,#57
 svc #0
 ret
 */
-char close_inst_data[] = { 0x28,0x07,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+__declspec(align(4)) char close_inst_data[] = { 0x28,0x07,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
 int (*close)(unsigned int) = ((int (*)(unsigned int)) & close_inst_data);
+/*
+mov x8,#57
+svc #0
+ret
+*/
+__declspec(align(4)) char eventfd2_inst_data[] = { 0x68,0x02,0x80,0xD2,0x01,0x00,0x00,0xD4,0xC0,0x03,0x5F,0xD6 };
+int (*eventfd2)(unsigned int,int) = ((int (*)(unsigned int,int)) & eventfd2_inst_data);
 #else
 #ifdef _M_AMD64
 /*
@@ -350,6 +357,23 @@ ret
 */
 char close_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x03,0x00,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
 int (*close)(unsigned int) = ((int (*)(unsigned int)) & close_inst_data);
+/*
+push rdi
+push rsi
+mov rdi,rcx
+mov rsi,rdx
+mov rdx,r8
+mov r10,r9
+mov r8,[rsp+56]
+mov r9,[rsp+64]
+mov rax,3
+syscall
+pop rsi
+pop rdi
+ret
+*/
+char eventfd2_inst_data[] = { 0x57,0x56,0x48,0x89,0xCF,0x48,0x89,0xD6,0x4C,0x89,0xC2,0x4D,0x89,0xCA,0x4C,0x8B,0x44,0x24,0x38,0x4C,0x8B,0x4C,0x24,0x40,0x48,0xC7,0xC0,0x22,0x01,0x00,0x00,0x0F,0x05,0x5E,0x5F,0xC3 };
+int (*eventfd2)(unsigned int) = ((int (*)(unsigned int)) & eventfd2_inst_data);
 #endif
 #endif
 
@@ -432,6 +456,9 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 		if (HM2 == 0) { return false; }
 		Wow64SystemServiceEx = (t_Wow64SystemServiceEx*)GetProcAddress(HM2, "Wow64SystemServiceEx");
 		if (!p__wine_unix_call) {
+			p__wine_unix_call = (*((t__wine_unix_call**)GetProcAddress(hofntdll, "__wine_unix_call_dispatcher")));
+		}
+		if (!p__wine_unix_call) {
 			p__wine_unix_call = (t__wine_unix_call*)GetProcAddress(hofntdll, "__wine_unix_call");
 		}
 		VirtualProtect(ioctl_inst_data, sizeof(ioctl_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
@@ -439,11 +466,13 @@ BOOL APIENTRY DllMain( HMODULE hModule,
 		VirtualProtect(mmap_inst_data, sizeof(mmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(munmap_inst_data, sizeof(munmap_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		VirtualProtect(close_inst_data, sizeof(close_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
+		VirtualProtect(eventfd2_inst_data, sizeof(eventfd2_inst_data), PAGE_EXECUTE_READWRITE, &Tmp);
 		FlushInstructionCache(GetCurrentProcess(), ioctl_inst_data, sizeof(ioctl_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), open_inst_data, sizeof(open_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), mmap_inst_data, sizeof(mmap_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), munmap_inst_data, sizeof(munmap_inst_data));
 		FlushInstructionCache(GetCurrentProcess(), close_inst_data, sizeof(close_inst_data));
+		FlushInstructionCache(GetCurrentProcess(), eventfd2_inst_data, sizeof(eventfd2_inst_data));
 	case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
@@ -619,8 +648,10 @@ typedef struct _ARM_CONTEXT
 	ULONG Padding2[2];              /* 198 */
 } ARM_CONTEXT;
 
-__declspec(align(4)) char bopcode[] = { 0x01,0x00,0x00,0xEF,0x0E,0xF0,0xA0,0xE1 };
-__declspec(align(4)) char unixbopcode[] = { 0x02,0x00,0x00,0xEF,0x0E,0xF0,0xA0,0xE1 };
+__declspec(align(4096)) char bopcode[] = { 0x01,0x00,0x00,0xEF,0x1E,0xFF,0x2F,0xE1 };
+__declspec(align(4096)) char unixbopcode[] = { 0x02,0x00,0x00,0xEF,0x1E,0xFF,0x2F,0xE1 };
+__declspec(align(4096)) UINT64 syscallexitio = 0;
+__declspec(align(4096)) UINT32 syscallhandler[4096];
 #ifndef ThreadWow64Context
 #define ThreadWow64Context (THREADINFOCLASS)0x1d
 #endif
@@ -924,7 +955,7 @@ UINT64 set_kvm_regs(unsigned int run, kvm_regs* regs_tmp)
 UINT32* interruptvect;
 
 __declspec(align(4096)) struct basicpt{
-unsigned long long l0_page_table[512];
+unsigned long long l0_page_table[1024];
 unsigned long long l1_page_table[512];
 unsigned long long l2_page_table[131072];
 unsigned long long l3_page_table[1048576];
@@ -965,7 +996,7 @@ extern "C" {
 		/* l3 page table */
 		/* RAM        : AF=1, SH=3, Indx=0, EntryType=1 */
 		for (UINT64 i = 0; i < 1048576; i++) {
-			basicalypage.l3_page_table[i] = (((UINT64)((i > 0) ? 1 : 0)) << 52) | (((UINT64)i << (12)) & 0xFFFFFFFFF000) | (1 << 10) | (3 << 8) | (1 << 6) | (0 << 2) | 3;
+			basicalypage.l3_page_table[i] = (((UINT64)(((i % 512) > 0) ? 1 : 0)) << 52) | (((UINT64)i << (12)) & 0xFFFFFFFFF000) | (1 << 10) | (3 << 8) | (1 << 6) | (0 << 2) | 3;
 		}
 		/* l2 page table */
 		for (int i = 0; i < 2048; i++) {
@@ -980,7 +1011,11 @@ extern "C" {
 			basicalypage.l1_page_table[i] = 0;
 		}
 		basicalypage.l0_page_table[0] = ((((UINT64)&basicalypage.l1_page_table[0] >> 12) << 12) & 0xFFFFFFFFF000) | (1 << 10) | (3 << 8) | (1 << 6) | 3;
+		basicalypage.l0_page_table[512] = ((((UINT64)0 >> 12) << 12) & 0xFFFFFFFFF000) | (1 << 10) | (3 << 8) | (1 << 6) | (0 << 2) | 3;
 		for (int i = 1; i < 512; i++) {
+			basicalypage.l0_page_table[i] = 0;
+		}
+		for (int i = 513; i < 1023; i++) {
 			basicalypage.l0_page_table[i] = 0;
 		}
 #else
@@ -993,11 +1028,22 @@ extern "C" {
 		}
 #endif
 
-		VirtualProtect(bopcode, sizeof(bopcode), PAGE_EXECUTE_READWRITE, &Tmp);
-		FlushInstructionCache(GetCurrentProcess(), bopcode, sizeof(bopcode));
-		VirtualProtect(unixbopcode, sizeof(unixbopcode), PAGE_EXECUTE_READWRITE, &Tmp);
-		FlushInstructionCache(GetCurrentProcess(), unixbopcode, sizeof(unixbopcode));
-		interruptvect = (UINT32*)0xffffff8000000000;//0x100000000;//0x1fffff000;
+		VirtualProtect(&bopcode[0], sizeof(bopcode), PAGE_EXECUTE_READWRITE, &Tmp);
+		FlushInstructionCache(GetCurrentProcess(), &bopcode[0], sizeof(bopcode));
+		VirtualProtect(&unixbopcode[0], sizeof(unixbopcode), PAGE_EXECUTE_READWRITE, &Tmp);
+		FlushInstructionCache(GetCurrentProcess(), &unixbopcode[0], sizeof(unixbopcode));
+		for (int cnt = 0; cnt < 1024; cnt++) { syscallhandler[cnt] = 0xD503201F; }
+		syscallhandler[1021] = 0xD2800010 | (((((UINT64)&syscallexitio) >> (16 * 0)) & 0xFFFF) << 5);
+		syscallhandler[1022] = 0xF2A00010 | (((((UINT64)&syscallexitio) >> (16 * 1)) & 0xFFFF) << 5);
+		syscallhandler[1023] = 0xF9000200;
+		for (int cnt = 0; cnt < 32; cnt++) {
+			syscallhandler[(0x80 * cnt) + 0] = 0xD2800010 | (((((UINT64)&syscallexitio) >> (16 * 0)) & 0xFFFF) << 5);
+			syscallhandler[(0x80 * cnt) + 1] = 0xF2A00010 | (((((UINT64)&syscallexitio) >> (16 * 1)) & 0xFFFF) << 5);
+			syscallhandler[(0x80 * cnt) + 2] = 0xF9000200;
+		}
+		VirtualProtect(&syscallhandler[0], sizeof(syscallhandler), PAGE_EXECUTE_READWRITE, &Tmp);
+		FlushInstructionCache(GetCurrentProcess(), &syscallhandler[0], sizeof(syscallhandler));
+		interruptvect = (UINT32*)0xFFFFFF8000000000;//0x100000000;//0x1fffff000;
 #if 0
 		interruptvect = (UINT32*)VirtualAlloc((LPVOID)0x6bff0000,4096,0x3000,0x40);
 		if (((UINT64)interruptvect >> 32)) { return STATUS_INVALID_ADDRESS; }
@@ -1044,11 +1090,14 @@ extern "C" {
 		struct kvm_userspace_memory_region region;
 		struct kvm_userspace_memory_region region2;
 		struct kvm_userspace_memory_region region3;
+		struct kvm_userspace_memory_region region4;
+		struct kvm_userspace_memory_region region5;
 		struct kvm_vcpu_init preferred;
 		struct kvm_vcpu_init init;
 		EXCEPTION_RECORD rec;
 emuresume:
 		RtlWow64GetCurrentCpuArea(NULL, (void**)&wow_context, NULL);
+		//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\n", (UINT32)(wow_context->R0 >> 0), (UINT32)(wow_context->R1 >> 0), (UINT32)(wow_context->R2 >> 0), (UINT32)(wow_context->R3 >> 0), (UINT32)(wow_context->R4 >> 0), (UINT32)(wow_context->R5 >> 0), (UINT32)(wow_context->R6 >> 0), (UINT32)(wow_context->R7 >> 0), (UINT32)(wow_context->R8 >> 0), (UINT32)(wow_context->R9 >> 0), (UINT32)(wow_context->R10 >> 0), (UINT32)(wow_context->R11 >> 0), (UINT32)(wow_context->R12 >> 0), (UINT32)(wow_context->Sp >> 0), (UINT32)(wow_context->Lr >> 0), (UINT32)((wow_context->Pc) >> 0));
 		if (kvmfd == 0) { kvmfd = open("/dev/kvm", 0, O_RDWR | O_CLOEXEC); }
 		if (kvmfd <= 0) { kvmfd = 0; printf("Opening \"/dev/kvm\" Failed\nErrcode:%d\n", kvmfd); return; }
 		int api_ver = ioctl(kvmfd, KVM_GET_API_VERSION, 0);
@@ -1069,22 +1118,58 @@ emuresume:
 			}
 			region2.slot = 1;
 			region2.flags = 0;
-			region2.guest_phys_addr = 0x10000;
-			region2.memory_size = (0x100000000 - 0x10000);
-			region2.userspace_addr = 0x10000;
+			region2.guest_phys_addr = ((UINT64)&syscallexitio) + 0x1000;
+			region2.memory_size = (0x100000000 - 0x10000) - (((UINT64)&syscallexitio) + 0x1000);
+			region2.userspace_addr = ((UINT64)&syscallexitio) + 0x1000;
 			if ((ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region2)) < 0) {
 				printf("KVM_SET_USER_MEMORY_REGION Failed\nErrcode:%d\n", ret);
 				return;
 			}
-			region3.slot = 2;
+			region5.slot = 2;
+			region5.flags = KVM_MEM_READONLY;
+			region5.guest_phys_addr = ((UINT64)&syscallexitio);
+			region5.memory_size = 0x1000;
+			region5.userspace_addr = ((UINT64)&syscallexitio);
+			if ((ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region5)) < 0) {
+				printf("KVM_SET_USER_MEMORY_REGION Failed\nErrcode:%d\n", ret);
+				return;
+			}
+			region3.slot = 3;
 			region3.flags = 0;
-			region3.guest_phys_addr = 0;
-			region3.memory_size = 0x10000;
-			region3.userspace_addr = 0;
+			region3.guest_phys_addr = 0x10000;
+			region3.memory_size = ((UINT64)&syscallexitio) - 0x10000;
+			region3.userspace_addr = 0x10000;
 			if ((ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region3)) < 0) {
 				printf("KVM_SET_USER_MEMORY_REGION Failed\nErrcode:%d\n", ret);
 				return;
 			}
+			region4.slot = 4;
+			region4.flags = 0;
+			region4.guest_phys_addr = 0;
+			region4.memory_size = 0x10000;
+			region4.userspace_addr = 0;
+			if ((ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region4)) < 0) {
+				printf("KVM_SET_USER_MEMORY_REGION Failed\nErrcode:%d\n", ret);
+				return;
+			}
+		}
+		/*kvm_ioeventfd syscallhook;
+		syscallhook.addr = ((UINT64)&syscallexitio);
+		syscallhook.datamatch = 0;
+		syscallhook.len = 8;
+		syscallhook.fd = eventfd2(0,0);
+		syscallhook.flags = KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY;*/
+		kvm_coalesced_mmio_zone syscallhookmmio;
+		syscallhookmmio.addr = ((UINT64)&syscallexitio);
+		syscallhookmmio.size = 4096;
+		syscallhookmmio.pad = 0;
+		/*if ((ret = ioctl(vmfd, KVM_IOEVENTFD, (UINT64)&syscallhook)) < 0) {
+			printf("KVM_IOEVENTFD Failed\nErrcode:%d\n", ret);
+			return;
+		}*/
+		if ((ret = ioctl(vmfd, KVM_REGISTER_COALESCED_MMIO, (UINT64)&syscallhookmmio)) < 0) {
+			printf("KVM_REGISTER_COALESCED_MMIO Failed\nErrcode:%d\n", ret);
+			return;
 		}
 		int vcpuidunusedx = 0;
 vcpuidunusedxp:
@@ -1135,12 +1220,19 @@ vcpuidunusedxp:
 			printf("KVM_GET_ONE_REG(SCTLR_EL1) Failed\nErrcode:%d\n", ret);
 			return;
 		}
+		UINT64 CPUECTLR_EL1tmp = 0;
+		ret = kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 1, 15, 2, 1), &CPUECTLR_EL1tmp);
+		if (ret < 0) {
+			//printf("KVM_GET_ONE_REG(CPUECTLR_EL1) Failed\nErrcode:%d\n", ret);
+			//return;
+		}
+		CPUECTLR_EL1tmp |= 64;
 		SCTLR_EL1tmp |= 0xC00800;	  // set mandatory reserved bits
 		SCTLR_EL1tmp |= (1 << 12) |   // I, Instruction cache enable. 
 						(1 << 4)  |   // SA0, Stack Alignment Check Enable for EL0
 						(1 << 3)  |   // SA, Stack Alignment Check Enable
 						(1 << 2)  |   // C, Data cache enable.
-						(1 << 1)  |   // A, Alignment check enable bit
+						(0 << 1)  |   // A, Alignment check enable bit
 						(1 << 0);     // set M, enable MMU
 		//SCTLR_EL1tmp &= ~(1 << 25);
 		//SCTLR_EL1tmp &= ~(1 << 24);
@@ -1154,7 +1246,7 @@ vcpuidunusedxp:
 		//SCTLR_EL1tmp |= (1 << 28);
 
 		UINT64 TTBR0_EL1tmp = ((UINT64)&basicalypage.l1_page_table[0]) | (((0) & 3) << 1) | 1;
-		UINT64 TTBR1_EL1tmp = ((UINT64)&basicalypage.l3_page_table[0]) | 1;
+		UINT64 TTBR1_EL1tmp = ((UINT64)&basicalypage.l0_page_table[512]) | 1;
 		UINT64 MAIR_EL1tmp =((0x47ul << (3 * 8)) |   /* normal memory and non cacheable */
 							 (0x00ul << (2 * 8)) |   /* device memory */
 							 (0x44ul << (1 * 8)) |   /* normal memory and no data cache */
@@ -1207,6 +1299,11 @@ vcpuidunusedxp:
 			printf("KVM_SET_ONE_REG(VBAR_EL1) Failed\nErrcode:%d\n", ret);
 			return;
 		}
+		ret = kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 1, 15, 2, 1), &CPUECTLR_EL1tmp);
+		if (ret < 0) {
+			//printf("KVM_SET_ONE_REG(CPUECTLR_EL1) Failed\nErrcode:%d\n", ret);
+			//return;
+		}
 		/*ret = kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 6, 0, 0), &FAR_EL1tmp);
 		if (ret < 0) {
 			printf("KVM_SET_ONE_REG(FAR_EL1) Failed\nErrcode:%d\n", ret);
@@ -1215,30 +1312,6 @@ vcpuidunusedxp:
 		UINT8 svctype = 0;
 		bool emustopped = false;
 		get_kvm_regs(vcpufd, &regs);
-		regs.regs.regs[0] = wow_context->R0;
-		regs.regs.regs[1] = wow_context->R1;
-		regs.regs.regs[2] = wow_context->R2;
-		regs.regs.regs[3] = wow_context->R3;
-		regs.regs.regs[4] = wow_context->R4;
-		regs.regs.regs[5] = wow_context->R5;
-		regs.regs.regs[6] = wow_context->R6;
-		regs.regs.regs[7] = wow_context->R7;
-		regs.regs.regs[8] = wow_context->R8;
-		regs.regs.regs[9] = wow_context->R9;
-		regs.regs.regs[10] = wow_context->R10;
-		regs.regs.regs[11] = wow_context->R11;
-		regs.regs.regs[12] = wow_context->R12;
-		regs.regs.regs[13] = wow_context->Sp;
-		regs.regs.regs[14] = wow_context->Lr;
-		regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
-		//regs.regs.pstate = (((wow_context->Cpsr ^ ((!(wow_context->Pc & 1)) << 5)) | ((wow_context->Pc & 1) << 5)) & 0xFE00FC20) | 0x10;
-		regs.regs.pstate = (wow_context->Cpsr & 0xFE00FC20) | 0x10;
-		if (wow_context->Pc & 1) { regs.regs.pstate |= 0x20; }
-		regs.regs.sp = (UINT64)arm64stack + 4096;
-		regs.sp_el1 = (UINT64)arm64stack + 8192;
-		regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
-		regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
-		for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
 #if 0
 		regs.spsr[0] = (regs.regs.pstate & 0xFFFFFFE0) | 0x5 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
 		regs.spsr[1] = (regs.regs.pstate & 0xFFFFFFE0) | 0x7 | ((UINT64)((((UINT64)wow_context->Pc) & 1) << ((UINT64)5)));
@@ -1254,44 +1327,217 @@ vcpuidunusedxp:
 		regs.spsr[4] = 0x1;/**/
 #endif
 		UINT64 ret64 = 0;
-		while (emustopped == false) {
+		UINT32 debugcount = 0;
+		{
 		executeinst:
+			teb = (__TEB*)NtCurrentTeb();
+			TPIDR_EL0tmp = PtrToUlong(get_wow_teb(teb));
+			if (kvm_set_one_reg(vcpufd, ARM64_SYS_REG(3, 3, 13, 0, 2), &TPIDR_EL0tmp) < 0) {
+				emustopped = true;
+				goto endofemu;
+			}
+			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region2) < 0) {
+				emustopped = true;
+				goto endofemu;
+			}
+			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region3) < 0) {
+				emustopped = true;
+				goto endofemu;
+			}
+			if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region4) < 0) {
+				emustopped = true;
+				goto endofemu;
+			}
+			regs.regs.regs[0] = wow_context->R0;
+			regs.regs.regs[1] = wow_context->R1;
+			regs.regs.regs[2] = wow_context->R2;
+			regs.regs.regs[3] = wow_context->R3;
+			regs.regs.regs[4] = wow_context->R4;
+			regs.regs.regs[5] = wow_context->R5;
+			regs.regs.regs[6] = wow_context->R6;
+			regs.regs.regs[7] = wow_context->R7;
+			regs.regs.regs[8] = wow_context->R8;
+			regs.regs.regs[9] = wow_context->R9;
+			regs.regs.regs[10] = wow_context->R10;
+			regs.regs.regs[11] = wow_context->R11;
+			regs.regs.regs[12] = wow_context->R12;
+			regs.regs.regs[13] = wow_context->Sp;
+			regs.regs.regs[14] = wow_context->Lr;
+			regs.regs.pc = wow_context->Pc & 0xFFFFFFFE;
+			//regs.regs.pstate = (((wow_context->Cpsr ^ ((!(wow_context->Pc & 1)) << 5)) | ((wow_context->Pc & 1) << 5)) & 0xFE00FC20) | 0x10;
+			regs.regs.pstate = (wow_context->Cpsr & 0xFE00FC20) | 0x10;
+			if (wow_context->Pc & 1) { regs.regs.pstate |= 0x20; }
+			regs.regs.sp = (UINT64)arm64stack + 4096;
+			regs.sp_el1 = (UINT64)arm64stack + 8192;
+			regs.fp_regs.fpsr = wow_context->Fpscr & 0xF800009F;
+			regs.fp_regs.fpcr = wow_context->Fpscr & 0x07F79F00;
+			for (int cnt = 0; cnt < 16; cnt++) { regs.fp_regs.vregs[cnt].q[0] = wow_context->Q[cnt].Low; regs.fp_regs.vregs[cnt].q[1] = wow_context->Q[cnt].High; }
+			//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
 			ret64 = execute_vcpu(vcpufd, &regs);
+			wow_context->R0 = regs.regs.regs[0];
+			wow_context->R1 = regs.regs.regs[1];
+			wow_context->R2 = regs.regs.regs[2];
+			wow_context->R3 = regs.regs.regs[3];
+			wow_context->R4 = regs.regs.regs[4];
+			wow_context->R5 = regs.regs.regs[5];
+			wow_context->R6 = regs.regs.regs[6];
+			wow_context->R7 = regs.regs.regs[7];
+			wow_context->R8 = regs.regs.regs[8];
+			wow_context->R9 = regs.regs.regs[9];
+			wow_context->R10 = regs.regs.regs[10];
+			wow_context->R11 = regs.regs.regs[11];
+			wow_context->R12 = regs.regs.regs[12];
+			wow_context->Sp = regs.regs.regs[13];
+			wow_context->Lr = regs.regs.regs[14];
+			wow_context->Pc = (regs.elr_el1) | ((regs.spsr[0] >> 5) & 1);
+			wow_context->Cpsr = (regs.spsr[0] & 0xFE00FC20) | 0x10;
+			wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
+			for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
+			kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+			/*printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\nOPCODE:%08X%08X%08X\nESR_EL1:%08X%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0), (UINT32)((*(UINT32*)(regs.elr_el1 - 4)) >> 0), (UINT32)((*(UINT32*)(regs.elr_el1)) >> 0), (UINT32)((*(UINT32*)(regs.elr_el1 + 4)) >> 0), ((UINT32)(ESR_EL1tmp >> 32)), ((UINT32)(ESR_EL1tmp >> 0)));
+			if (debugcount < 6) { debugcount++; }
+			else { while (true) {} }*/
+			if ((wow_context->Pc - 4) == ((UINT32)&bopcode) && (wow_context->R0) == ((UINT32)&bopcode)) {
+				ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+				if (((wow_context->Pc - 4) & ~1) == ((UINT32)&bopcode)) {
+					wow_context->Pc = wow_context->Lr;
+					wow_context->Lr = wow_context->R3;
+					wow_context->Sp += 4 * 4;
+					//wow_context->Pc = wow_context->Lr;
+					wow_context->R0 = ret;
+				}
+				//emustopped = true;
+				//goto endofemu;
+				goto executeinst;
+			}
+			else if ((wow_context->Pc - 4) == ((UINT32)&unixbopcode)) {
+				UINT32* p = 0;
+				if (p__wine_unix_call != 0) {
+					UINT64 handle;
+					p = (UINT32*)&handle;
+					p[0] = wow_context->R0;
+					p[1] = wow_context->R1;
+					ret = p__wine_unix_call(handle, wow_context->R2, ULongToPtr(wow_context->R3));
+				}
+				else { ret = -1; }
+				wow_context->Pc = wow_context->Lr;
+				wow_context->R0 = ret;
+				//emustopped = true;
+				//goto endofemu;
+				goto executeinst;
+			}
+			goto executeinst;
 			if ((ret64 >> 32) & 2) {
+				//printf("Error NO:%d\n", ((int)(ret64 & 0xFFFFFFFF)));
 				if (((int)(ret64 & 0xFFFFFFFF)) == -14) {
+					//printf("exc:%03X\n", ((UINT32)regs.regs.pc & 0x7FF));
+					//printf("excptr:%08X%08X\n", ((UINT32)(regs.regs.pc >> (32 * 1))), ((UINT32)(regs.regs.pc >> (32 * 0))));
+					//printf("excptr32:%08X\n", ((UINT32)regs.elr_el1));
+					//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
 					if (((UINT64)regs.regs.pc & 0xFFFFFFFFFFFFF800) == VBAR_EL1tmp) {
 						//printf("exc:%03X\n", ((UINT32)regs.regs.pc & 0x7FF));
 						//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
 
 						kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+						//printf("SPSR:%08X\nPSTATE:%08X\nELR_EL1:%08X\nESR_EL1:%08X\n", regs.spsr[0], regs.regs.pstate, regs.elr_el1, ESR_EL1tmp);
 						//printf("ESR_EL1:%08X%08X\n", (UINT64)ESR_EL1tmp >> 32, (UINT64)ESR_EL1tmp >> 0);
 						if (((ESR_EL1tmp >> 26) & 0x3f) == 0b010001) {
-							svctype = (UINT16)ESR_EL1tmp;
+							svctype = (UINT16)ESR_EL1tmp & 0xFFFF;
 							//printf("Syscall:%08X\nsyscalltype:%08X\n", regs.regs.regs[12], svctype);
+							//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
+							UINT32* p = 0;
+							switch (svctype) {
+							case 0:
+								if ((wow_context->Pc - 4) == ((UINT32)&bopcode) && (wow_context->R0) == ((UINT32)&bopcode)) {
+									ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+									if (((wow_context->Pc - 4) & ~1) == ((UINT32)&bopcode)) {
+										wow_context->Pc = wow_context->Lr;
+										wow_context->Lr = wow_context->R3;
+										//wow_context->Sp += 4 * 4;
+										//wow_context->Pc = wow_context->Lr;
+										wow_context->R0 = ret;
+									}
+									//emustopped = true;
+									//goto endofemu;
+									goto executeinst;
+								}
+								else if ((wow_context->Pc - 4) == ((UINT32)&unixbopcode)) {
+									if (p__wine_unix_call != 0) {
+										UINT64 handle;
+										p = (UINT32*)&handle;
+										p[0] = wow_context->R0;
+										p[1] = wow_context->R1;
+										ret = p__wine_unix_call(handle, wow_context->R2, ULongToPtr(wow_context->R3));
+									}
+									else { ret = -1; }
+									wow_context->Pc = wow_context->Lr;
+									wow_context->R0 = ret;
+									//emustopped = true;
+									//goto endofemu;
+									goto executeinst;
+								}
+								{
+									DWORD arg4quit[] = { 0xffffffff,1 };
+									Wow64SystemServiceEx(212, arg4quit);
+									return;
+								}
+							case 1:
+								ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+								if (((wow_context->Pc - 4) & ~1) == ((UINT32)&bopcode)) {
+									wow_context->Pc = wow_context->Lr;
+									wow_context->Lr = wow_context->R3;
+									//wow_context->Sp += 4 * 4;
+									//wow_context->Pc = wow_context->Lr;
+									wow_context->R0 = ret;
+								}
+								//emustopped = true;
+								//goto endofemu;
+								goto executeinst;
+								break;
+							case 2:
+								//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
+								if (p__wine_unix_call != 0) {
+									UINT64 handle;
+									p = (UINT32*)&handle;
+									p[0] = wow_context->R0;
+									p[1] = wow_context->R1;
+									ret = p__wine_unix_call(handle, wow_context->R2, ULongToPtr(wow_context->R3));
+								}
+								else { ret = -1; }
+								wow_context->Pc = wow_context->Lr;
+								wow_context->R0 = ret;
+								//emustopped = true;
+								//goto endofemu;
+								goto executeinst;
+								break;
+							case 3:
+								goto executeinst;
+								break;
+							case 4:
+								wow_context->R0 = ((UINT32(*)(UINT32))(*(UINT32*)(wow_context->Pc)))(wow_context->R0);
+								wow_context->Pc = wow_context->Lr;
+								goto executeinst;
+								break;
+							case 5:
+								wow_context->R0 = ((UINT32(*)(UINT32))(*(UINT64*)(wow_context->Pc)))(wow_context->R0);
+								wow_context->Pc = wow_context->Lr;
+								goto executeinst;
+								break;
+							case 6:
+								wow_context->R0 = ((UINT32(*)(ARM_CONTEXT*))(*(UINT32*)(wow_context->Pc)))(wow_context);
+								wow_context->Pc = wow_context->Lr;
+								goto executeinst;
+								break;
+							case 7:
+								wow_context->R0 = ((UINT32(*)(ARM_CONTEXT*))(*(UINT64*)(wow_context->Pc)))(wow_context);
+								wow_context->Pc = wow_context->Lr;
+								goto executeinst;
+								break;
+							}
 							emustopped = true;
-							break;
+							goto endofemu;
 						}
-						{
-							wow_context->R0 = regs.regs.regs[0];
-							wow_context->R1 = regs.regs.regs[1];
-							wow_context->R2 = regs.regs.regs[2];
-							wow_context->R3 = regs.regs.regs[3];
-							wow_context->R4 = regs.regs.regs[4];
-							wow_context->R5 = regs.regs.regs[5];
-							wow_context->R6 = regs.regs.regs[6];
-							wow_context->R7 = regs.regs.regs[7];
-							wow_context->R8 = regs.regs.regs[8];
-							wow_context->R9 = regs.regs.regs[9];
-							wow_context->R10 = regs.regs.regs[10];
-							wow_context->R11 = regs.regs.regs[11];
-							wow_context->R12 = regs.regs.regs[12];
-							wow_context->Sp = regs.regs.regs[13];
-							wow_context->Lr = regs.regs.regs[14];
-							wow_context->Pc = (regs.regs.pc) | ((regs.regs.pstate >> 5) & 1);
-							wow_context->Cpsr = (regs.regs.pstate & 0xFE00FC20);
-							wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
-							for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
-
+						else if (((UINT32)regs.regs.pc & 0x780) == 0x600) {
 							if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100100) {
 								rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
 								rec.ExceptionFlags = 0;
@@ -1300,7 +1546,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100010) {
 								rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
@@ -1310,7 +1556,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100110) {
 								rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
@@ -1320,7 +1566,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b001101) {
 								rec.ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
@@ -1330,7 +1576,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000001) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1340,7 +1586,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000011) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1350,7 +1596,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000100) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1360,7 +1606,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000101) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1370,7 +1616,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000110) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1380,7 +1626,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000111) {
 								rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
@@ -1390,7 +1636,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b101000) {
 								if (ESR_EL1tmp & 1) {
@@ -1434,7 +1680,7 @@ vcpuidunusedxp:
 									RtlRaiseException(&rec);
 								}
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b110000) {
 								rec.ExceptionCode = EXCEPTION_BREAKPOINT;
@@ -1444,7 +1690,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b111000) {
 								rec.ExceptionCode = EXCEPTION_BREAKPOINT;
@@ -1454,7 +1700,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b110010) {
 								rec.ExceptionCode = EXCEPTION_SINGLE_STEP;
@@ -1464,7 +1710,7 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 							else {
 								rec.ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
@@ -1474,24 +1720,24 @@ vcpuidunusedxp:
 								rec.NumberParameters = 0;
 								RtlRaiseException(&rec);
 								emustopped = true;
-								break;
+								goto endofemu;
 							}
 						}
-						if (((UINT32)regs.regs.pc & 0x7FF) == 0x200) {
+						if (((UINT32)regs.regs.pc & 0x780) == 0x200) {
 							svctype = (regs.regs.regs[12] >> 16) & 0xFFFF;
 							regs.regs.regs[12] &= 0xFFFF;
 							emustopped = true;
-							break;
+							goto endofemu;
 						}
-						else if (((UINT32)regs.regs.pc & 0x7FF) == 0x600) {
+						else if (((UINT32)regs.regs.pc & 0x780) == 0x600) {
 							regs.regs.pstate = (regs.regs.pstate & 0xFFFFFFC0) | 0x10 | ((regs.elr_el1 & 1) << 5);
 							regs.regs.pc = regs.elr_el1 & 0xFFFFFFFE;
 							if ((regs.elr_el1 & 1)) { regs.regs.pc += 2; }
 							else { regs.regs.pc += 4; }
 							emustopped = true;
-							break;
+							goto endofemu;
 						}
-						else if ((((UINT32)regs.regs.pc) & 0x7FF) == 0x780) {
+						else if ((((UINT32)regs.regs.pc) & 0x780) == 0x780) {
 							svctype = 3;
 							kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
 							regs.regs.pstate = (regs.regs.pstate & 0xFFFFFFC0) | 0x10 | ((regs.elr_el1 & 1) << 5);
@@ -1561,89 +1807,451 @@ vcpuidunusedxp:
 								}
 							}
 							emustopped = true;
-							break;
+							goto endofemu;
 						}
 						else {
 							if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
-								break;
+								goto endofemu;
 							}
 							if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region2) < 0) {
-								break;
+								goto endofemu;
 							}
 						}
 					}
 					else { goto executeinst; }
 				}
 			}
+			//printf("Exit Reason:%d\n", run->exit_reason);
 			switch (run->exit_reason) {
+			case KVM_EXIT_MMIO:
+				//printf("exc:%03X\n", ((UINT32)regs.regs.pc & 0x7FF));
+				if (((UINT64)regs.regs.pc & 0xFFFFFFFFFFFFF800) == VBAR_EL1tmp) {
+					//printf("exc:%03X\n", ((UINT32)regs.regs.pc & 0x7FF));
+					//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
+
+					kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+					//printf("SPSR:%08X\nPSTATE:%08X\nELR_EL1:%08X\nESR_EL1:%08X\n", regs.spsr[0], regs.regs.pstate, regs.elr_el1, ESR_EL1tmp);
+					//printf("ESR_EL1:%08X%08X\n", (UINT64)ESR_EL1tmp >> 32, (UINT64)ESR_EL1tmp >> 0);
+					if (((ESR_EL1tmp >> 26) & 0x3f) == 0b010001) {
+						svctype = (UINT16)ESR_EL1tmp & 0xFFFF;
+						//printf("Syscall:%08X\nsyscalltype:%08X\n", regs.regs.regs[12], svctype);
+						//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
+						UINT32* p = 0;
+						switch (svctype) {
+						case 0:
+							if ((wow_context->Pc - 4) == ((UINT32)&bopcode) && (wow_context->R0) == ((UINT32)&bopcode)) {
+								ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+								if (((wow_context->Pc - 4) & ~1) == ((UINT32)&bopcode)) {
+									wow_context->Pc = wow_context->Lr;
+									wow_context->Lr = wow_context->R3;
+									//wow_context->Sp += 4 * 4;
+									//wow_context->Pc = wow_context->Lr;
+									wow_context->R0 = ret;
+								}
+								emustopped = true;
+								goto endofemu;
+								//goto executeinst;
+							}
+							else if ((wow_context->Pc - 4) == ((UINT32)&unixbopcode)) {
+								if (p__wine_unix_call != 0) {
+									UINT64 handle;
+									p = (UINT32*)&handle;
+									p[0] = wow_context->R0;
+									p[1] = wow_context->R1;
+									ret = p__wine_unix_call(handle, wow_context->R2, ULongToPtr(wow_context->R3));
+								}
+								else { ret = -1; }
+								wow_context->Pc = wow_context->Lr;
+								wow_context->R0 = ret;
+								emustopped = true;
+								goto endofemu;
+								//goto executeinst;
+							}
+							{
+								DWORD arg4quit[] = { 0xffffffff,1 };
+								Wow64SystemServiceEx(212, arg4quit);
+								return;
+							}
+						case 1:
+							ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+							if (((wow_context->Pc - 4) & ~1) == ((UINT32)&bopcode)) {
+								wow_context->Pc = wow_context->Lr;
+								wow_context->Lr = wow_context->R3;
+								//wow_context->Sp += 4 * 4;
+								//wow_context->Pc = wow_context->Lr;
+								wow_context->R0 = ret;
+							}
+							emustopped = true;
+							goto endofemu;
+							//goto executeinst;
+							break;
+						case 2:
+							//printf("R0:%08X\nR1:%08X\nR2:%08X\nR3:%08X\nR4:%08X\nR5:%08X\nR6:%08X\nR7:%08X\nR8:%08X\nR9:%08X\nR10:%08X\nR11:%08X\nR12:%08X\nR13:%08X\nR14:%08X\nR15:%08X\nSP:%08X\nPCREAL:%08X\n", (UINT32)(regs.regs.regs[0] >> 0), (UINT32)(regs.regs.regs[1] >> 0), (UINT32)(regs.regs.regs[2] >> 0), (UINT32)(regs.regs.regs[3] >> 0), (UINT32)(regs.regs.regs[4] >> 0), (UINT32)(regs.regs.regs[5] >> 0), (UINT32)(regs.regs.regs[6] >> 0), (UINT32)(regs.regs.regs[7] >> 0), (UINT32)(regs.regs.regs[8] >> 0), (UINT32)(regs.regs.regs[9] >> 0), (UINT32)(regs.regs.regs[10] >> 0), (UINT32)(regs.regs.regs[11] >> 0), (UINT32)(regs.regs.regs[12] >> 0), (UINT32)(regs.regs.regs[13] >> 0), (UINT32)(regs.regs.regs[14] >> 0), (UINT32)((regs.elr_el1) >> 0), (UINT32)(regs.regs.sp >> 0), (UINT32)(regs.regs.pc >> 0));
+							if (p__wine_unix_call != 0) {
+								UINT64 handle;
+								p = (UINT32*)&handle;
+								p[0] = wow_context->R0;
+								p[1] = wow_context->R1;
+								ret = p__wine_unix_call(handle, wow_context->R2, ULongToPtr(wow_context->R3));
+							}
+							else { ret = -1; }
+							wow_context->Pc = wow_context->Lr;
+							wow_context->R0 = ret;
+							emustopped = true;
+							goto endofemu;
+							//goto executeinst;
+							break;
+						case 3:
+							goto executeinst;
+							break;
+						case 4:
+							wow_context->R0 = ((UINT32(*)(UINT32))(*(UINT32*)(wow_context->Pc)))(wow_context->R0);
+							wow_context->Pc = wow_context->Lr;
+							goto executeinst;
+							break;
+						case 5:
+							wow_context->R0 = ((UINT32(*)(UINT32))(*(UINT64*)(wow_context->Pc)))(wow_context->R0);
+							wow_context->Pc = wow_context->Lr;
+							goto executeinst;
+							break;
+						case 6:
+							wow_context->R0 = ((UINT32(*)(ARM_CONTEXT*))(*(UINT32*)(wow_context->Pc)))(wow_context);
+							wow_context->Pc = wow_context->Lr;
+							goto executeinst;
+							break;
+						case 7:
+							wow_context->R0 = ((UINT32(*)(ARM_CONTEXT*))(*(UINT64*)(wow_context->Pc)))(wow_context);
+							wow_context->Pc = wow_context->Lr;
+							goto executeinst;
+							break;
+						}
+						emustopped = true;
+						goto endofemu;
+					}
+					else if (((UINT32)regs.regs.pc & 0x780) == 0x600) {
+						if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100100) {
+							rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100010) {
+							rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b100110) {
+							rec.ExceptionCode = EXCEPTION_DATATYPE_MISALIGNMENT;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b001101) {
+							rec.ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000001) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000011) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000100) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000101) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000110) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b000111) {
+							rec.ExceptionCode = EXCEPTION_PRIV_INSTRUCTION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b101000) {
+							if (ESR_EL1tmp & 1) {
+								rec.ExceptionCode = EXCEPTION_FLT_INVALID_OPERATION;
+								rec.ExceptionFlags = 0;
+								rec.ExceptionRecord = NULL;
+								rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+								rec.NumberParameters = 0;
+								RtlRaiseException(&rec);
+							}
+							else if (ESR_EL1tmp & 2) {
+								rec.ExceptionCode = EXCEPTION_FLT_DIVIDE_BY_ZERO;
+								rec.ExceptionFlags = 0;
+								rec.ExceptionRecord = NULL;
+								rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+								rec.NumberParameters = 0;
+								RtlRaiseException(&rec);
+							}
+							else if (ESR_EL1tmp & 4) {
+								rec.ExceptionCode = EXCEPTION_FLT_OVERFLOW;
+								rec.ExceptionFlags = 0;
+								rec.ExceptionRecord = NULL;
+								rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+								rec.NumberParameters = 0;
+								RtlRaiseException(&rec);
+							}
+							else if (ESR_EL1tmp & 8) {
+								rec.ExceptionCode = EXCEPTION_FLT_UNDERFLOW;
+								rec.ExceptionFlags = 0;
+								rec.ExceptionRecord = NULL;
+								rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+								rec.NumberParameters = 0;
+								RtlRaiseException(&rec);
+							}
+							else if (ESR_EL1tmp & 16) {
+								rec.ExceptionCode = EXCEPTION_FLT_INEXACT_RESULT;
+								rec.ExceptionFlags = 0;
+								rec.ExceptionRecord = NULL;
+								rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+								rec.NumberParameters = 0;
+								RtlRaiseException(&rec);
+							}
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b110000) {
+							rec.ExceptionCode = EXCEPTION_BREAKPOINT;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b111000) {
+							rec.ExceptionCode = EXCEPTION_BREAKPOINT;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else if (((ESR_EL1tmp >> 26) & 0x3f) == 0b110010) {
+							rec.ExceptionCode = EXCEPTION_SINGLE_STEP;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+						else {
+							rec.ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
+							rec.ExceptionFlags = 0;
+							rec.ExceptionRecord = NULL;
+							rec.ExceptionAddress = ULongToPtr(regs.elr_el1);
+							rec.NumberParameters = 0;
+							RtlRaiseException(&rec);
+							emustopped = true;
+							goto endofemu;
+						}
+					}
+					if (((UINT32)regs.regs.pc & 0x780) == 0x200) {
+						svctype = (regs.regs.regs[12] >> 16) & 0xFFFF;
+						regs.regs.regs[12] &= 0xFFFF;
+						emustopped = true;
+						goto endofemu;
+					}
+					else if (((UINT32)regs.regs.pc & 0x780) == 0x600) {
+						regs.regs.pstate = (regs.regs.pstate & 0xFFFFFFC0) | 0x10 | ((regs.elr_el1 & 1) << 5);
+						regs.regs.pc = regs.elr_el1 & 0xFFFFFFFE;
+						if ((regs.elr_el1 & 1)) { regs.regs.pc += 2; }
+						else { regs.regs.pc += 4; }
+						emustopped = true;
+						goto endofemu;
+					}
+					else if ((((UINT32)regs.regs.pc) & 0x780) == 0x780) {
+						svctype = 3;
+						kvm_get_one_reg(vcpufd, ARM64_SYS_REG(3, 0, 5, 2, 0), &ESR_EL1tmp);
+						regs.regs.pstate = (regs.regs.pstate & 0xFFFFFFC0) | 0x10 | ((regs.elr_el1 & 1) << 5);
+						regs.regs.pc = regs.elr_el1 & 0xFFFFFFFE;
+						UINT32 opcodetmp = 0;
+						if ((regs.elr_el1 & 1)) { opcodetmp = ((UINT32)(*(UINT16*)(regs.regs.pc & 0xFFFFFFFE)) << (16 * 0)); regs.regs.pc += 2; if (((opcodetmp >> 13) & 7) == 7 && ((opcodetmp >> 11) & 3) != 0) { opcodetmp |= ((UINT32)(*(UINT16*)(regs.regs.pc & 0xFFFFFFFE)) << (16 * 1)); regs.regs.pc += 2; } }
+						else { opcodetmp = *(UINT32*)(regs.regs.pc & 0xFFFFFFFE); regs.regs.pc += 4; }
+						// Emulate ldrex,strex instructions!
+						if ((regs.elr_el1 & 1)) {
+							switch (opcodetmp & 0x0000FFF0) {
+							case 0xE850:
+								((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]) = *(UINT32*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]) + (((opcodetmp >> 16) & 0xFF) * 4));
+								break;
+							case 0xE840:
+								*(UINT32*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]) + (((opcodetmp >> 16) & 0xFF) * 4)) = ((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]);
+								((((opcodetmp >> 24) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 24) & 0xF]) = 0;
+								break;
+							case 0xE8D0:
+								if (((opcodetmp >> 20) & 0xF) == 0x4) {
+									((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]) = *(UINT8*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]));
+								}
+								else if (((opcodetmp >> 20) & 0xF) == 0x5) {
+									((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]) = *(UINT16*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]));
+								}
+								break;
+							case 0xE8C0:
+								if (((opcodetmp >> 20) & 0xF) == 0x4) {
+									*(UINT8*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF])) = ((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]);
+								}
+								else if (((opcodetmp >> 20) & 0xF) == 0x4) {
+									*(UINT16*)(((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF])) = ((((opcodetmp >> 28) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 28) & 0xF]);
+								}
+								((((opcodetmp >> 24) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 24) & 0xF]) = 0;
+								break;
+							}
+						}
+						else {
+							switch (opcodetmp & 0xFFF00FF0) {
+							case 0xE1900F90:
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = *(UINT32*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF]));
+								break;
+							case 0xE1800F90:
+								*(UINT32*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF])) = ((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]);
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = 0;
+								break;
+							case 0xE1B00F90:
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = *(UINT32*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF]));
+								break;
+							case 0xE1A00F90:
+								*(UINT32*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF])) = ((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]);
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = 0;
+								break;
+							case 0xE1D00F90:
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = *(UINT8*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF]));
+								break;
+							case 0xE1C00F90:
+								*(UINT8*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF])) = ((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]);
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = 0;
+								break;
+							case 0xE1F00F90:
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = *(UINT16*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF]));
+								break;
+							case 0xE1E00F90:
+								*(UINT16*)(((((opcodetmp >> 16) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 16) & 0xF])) = ((((opcodetmp >> 0) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 0) & 0xF]);
+								((((opcodetmp >> 12) & 0xF) == 0xF) ? regs.regs.pc : regs.regs.regs[(opcodetmp >> 12) & 0xF]) = 0;
+								break;
+							}
+						}
+						emustopped = true;
+						goto endofemu;
+					}
+					else {
+						if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
+							goto endofemu;
+						}
+						if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region2) < 0) {
+							goto endofemu;
+						}
+					}
+				}
+				else { goto executeinst; }
+				break;
 			case KVM_EXIT_HYPERCALL:
 				svctype = (regs.regs.regs[12] >> 16) & 0xFFFF;
 				regs.regs.regs[12] &= 0xFFFF;
 				//svctype = run->hypercall.nr;
 				//printf("%08X\n", svctype);
 				emustopped = true;
+				goto endofemu;
 				break;
 			default:
-				if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region) < 0) {
-					emustopped = true;
-				}
 				if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region2) < 0) {
 					emustopped = true;
+					goto endofemu;
+				}
+				if (ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, (UINT64)&region3) < 0) {
+					emustopped = true;
+					goto endofemu;
 				}
 				break;
 			}
+			goto executeinst;
 		}
+	endofemu:
 		//printf("Syscall:%08X\nsyscalltype:%08X\n", regs.regs.regs[12], svctype);
-#if 0
-		if (ret64) {
-			if ((ret64 >> 32) & 1) { 
-				printf("KVM_SET_ONE_REG Failed\nREGTYPE:%s\nErrcode:%d\n", (&regtypeno[((ret64 >> 48) & 0xF)]), ((int)(ret64 & 0xFFFFFFFF)));
-				return;
-			} else if ((ret64 >> 32) & 2) { 
-				printf("KVM_RUN Failed\nErrcode:%d\n", ((int)(ret64 & 0xFFFFFFFF)));
-				return;
-			} else if ((ret64 >> 32) & 4) {
-				printf("KVM_GET_ONE_REG Failed\nREGTYPE:%s\nErrcode:%d\n", (&regtypeno[((ret64 >> 48) & 0xF)]), ((int)(ret64 & 0xFFFFFFFF)));
-				return;
-			}
-		}
-#endif
-		wow_context->R0 = regs.regs.regs[0];
-		wow_context->R1 = regs.regs.regs[1];
-		wow_context->R2 = regs.regs.regs[2];
-		wow_context->R3 = regs.regs.regs[3];
-		wow_context->R4 = regs.regs.regs[4];
-		wow_context->R5 = regs.regs.regs[5];
-		wow_context->R6 = regs.regs.regs[6];
-		wow_context->R7 = regs.regs.regs[7];
-		wow_context->R8 = regs.regs.regs[8];
-		wow_context->R9 = regs.regs.regs[9];
-		wow_context->R10 = regs.regs.regs[10];
-		wow_context->R11 = regs.regs.regs[11];
-		wow_context->R12 = regs.regs.regs[12];
-		wow_context->Sp = regs.regs.regs[13];
-		wow_context->Lr = regs.regs.regs[14];
-		wow_context->Pc = (regs.regs.pc) | ((regs.regs.pstate >> 5) & 1);
-		wow_context->Cpsr = (regs.regs.pstate & 0xFE00FC20);
-		wow_context->Fpscr = (regs.fp_regs.fpcr | regs.fp_regs.fpsr);
-		for (int cnt = 0; cnt < 16; cnt++) { wow_context->Q[cnt].Low = regs.fp_regs.vregs[cnt].q[0]; wow_context->Q[cnt].High = regs.fp_regs.vregs[cnt].q[1]; }
 		munmap(run, sizeof(kvm_run));
 		close(vcpufd);
 		close(vmfd);
+		//close(syscallhook.fd);
 		vcpufd = 0; vmfd = 0;
 		//UINT32 hvctmp = (*(UINT32*)(wow_context->Pc & 0xFFFFFFFE));
 		//svctype = (((hvctmp>>8)&0xFF) | (((hvctmp >> 0) & 0xF) << 8) | (((hvctmp >> 24) & 0xF) << 12));
 		//printf("%08X\n", hvctmp);
-		UINT32* p = 0;
 		if (arm64stack != 0) {
 			VirtualFree(arm64stack, 0, 0x8000);
 		}
+#if 0
 	switch (svctype) {
 	case 1:
-		wow_context->R0 = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+		ret = Wow64SystemServiceEx(wow_context->R12, ULongToPtr(wow_context->Sp));
+		wow_context->R0 = ret;
 		wow_context->Pc = wow_context->Lr;
 		wow_context->Lr = wow_context->R3;
-		wow_context->Sp += 4 * 4;
 		goto emuresume;
 		break;
 	case 2:
@@ -1662,6 +2270,8 @@ vcpuidunusedxp:
 		goto emuresume;
 		break;
 	}
+#endif
+	//goto emuresume;
 	return;
 	}
 	__declspec(dllexport) void* WINAPI __wine_get_unix_opcode(void) { return (UINT32*)&unixbopcode; }
